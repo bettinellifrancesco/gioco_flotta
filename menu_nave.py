@@ -1,589 +1,852 @@
-import tkinter as tk
-from tkinter import ttk
-import pygame
-import sys
-import os
+import random
+import time
 import json
-import subprocess          
-import re
-
-try:
-    import tkvideo
-    tkvideo_available = True
-except ImportError:
-    tkvideo_available = False
-try:
-    from PIL import Image, ImageTk
-    pil_available = True
-except ImportError:
-    pil_available = False
-
-pygame.init()
-pygame.mixer.init()
-
-# ----------------------------------------------------------------------------
-# COSTANTI DI STILE
-# ----------------------------------------------------------------------------
-BG_COLOR    = "#1a0f00"
-BTN_COLOR_1 = "#c8a96e"
-BTN_COLOR_2 = "#7a4520"
-BTN_TEXT    = "#f5e6c8"
-BTN_HOVER   = "#e8c47a"
-TITLE_COLOR = "#f5d78e"
-TEXT_COLOR  = "#d4b896"
-
-FONT_TITLE = ("Georgia", 32, "bold")
-FONT_BTN   = ("Georgia", 14, "bold")
-FONT_LABEL = ("Georgia", 13)
-FONT_SMALL = ("Georgia", 11)
-
-# ── Percorsi personalizzabili ─────────────────────────────────────────────────
-
-VIDEO_FILE       = "assets_gioconave/wmremove-transformed.mp4"      # Lascia "" se non hai un video: userà l'animazione
-SHOP_SCRIPT      = "shop.py"               # Script del negozio da aprire dopo la transizione
-IMAGE_FOLDER     = "assets_gioconave/video in fotogrammi"  # Cartella con le immagini della slideshow
-FRAME_DELAY_MS   = 10 # Millisecondi tra un fotogramma e il successivo
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Slideshow tuning
-SLIDESHOW_FILL = "cover"  # 'cover' to fill window (crop), 'contain' to fit with letterbox
-SLIDESHOW_CROSSFADE = True
-CROSSFADE_MS = 125
-CROSSFADE_STEPS = 2
-
-initial_volume = 100
-
-def load_settings():
-    default = {
-        "volume_musica": 100,
-        "effetti_sonori": True,
-        "difficolta": "normale",
-        "qualita_grafica": "alta",
-        "lingua": "italiano"
-    }
-    if os.path.exists("config.json"):
-        try:
-            with open("config.json", "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return default
-    return default
-
-def save_settings(s):
-    try:
-        with open("config.json", "w", encoding="utf-8") as f:
-            json.dump(s, f, indent=4, ensure_ascii=False)
-    except Exception as e:
-        print(f"Errore salvataggio: {e}")
+from datetime import datetime
 
 
-def natural_sort_key(s):
-    parts = re.split(r'(\d+)', s)
-    return [int(p) if p.isdigit() else p.lower() for p in parts]
+FLOTTA_MAX = 16
+
+MIN_PROV = 0.0
 
 
-def resize_and_crop(img, size):
-    """Resize image to fill size (cover) and center-crop to exact size."""
-    desired_w, desired_h = size
-    w, h = img.size
-    if w == 0 or h == 0:
-        return img.resize((desired_w, desired_h), Image.LANCZOS)
-
-    if SLIDESHOW_FILL == 'cover':
-        scale = max(desired_w / w, desired_h / h)
-    else:
-        scale = min(desired_w / w, desired_h / h)
-
-    new_w = max(1, int(w * scale + 0.5))
-    new_h = max(1, int(h * scale + 0.5))
-    img = img.resize((new_w, new_h), Image.LANCZOS)
-
-    if SLIDESHOW_FILL == 'cover':
-        left = (new_w - desired_w) // 2
-        top = (new_h - desired_h) // 2
-        img = img.crop((left, top, left + desired_w, top + desired_h))
-    else:
-        # contain: paste onto background to avoid stretching
-        bg = Image.new('RGB', (desired_w, desired_h), BG_COLOR)
-        left = (desired_w - new_w) // 2
-        top = (desired_h - new_h) // 2
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
-        bg.paste(img, (left, top))
-        img = bg
-
-    if img.mode != 'RGB':
-        img = img.convert('RGB')
-    return img
-
-settings = load_settings()
-
-WIN_W, WIN_H = 1000, 592
-sfx_on  = settings.get("effetti_sonori", True)
-volume  = settings.get("volume_musica", 100)
-root         = None
-canvas       = None
-main_frame   = None
-settings_frame = None
-vol_label    = None
-bg_img       = None
+CONSUMO_VERDURA = 0.5
+CONSUMO_FRUTTA = 1.0
+CONSUMO_CARNE = 1.0
+CONSUMO_ACQUA = 0.5
 
 
-# ----------------------------------------------------------------------------
-# NAVIGAZIONE
-# ----------------------------------------------------------------------------
-def show_main_menu():
-    settings_frame.place_forget()
-    canvas.itemconfig("main", state="normal")
-
-def show_shop():
-    canvas.itemconfig("main", state="hidden")
-
-def show_settings_menu():
-    canvas.itemconfig("main", state="hidden")
-    settings_frame.place(relx=0.5, rely=0.5, anchor="center")
-
-def go_to_settings():
-    show_settings_menu()
-
-def go_to_shop():
-    show_shop()
-
-def go_to_main_menu():
-    show_main_menu()
+def mostra_menu_principale():
+    print("-----------NUOVO MONDO-----------")
+    print("1 - nuova partita")
+    print("2 - carica vecchia partita")
+    print("---------------------------------")
 
 
-# ----------------------------------------------------------------------------
-# HOVER BOTTONI FRAME
-# ----------------------------------------------------------------------------
-def on_btn_enter(e, btn):
-    btn.configure(bg=BTN_HOVER, fg=BG_COLOR)
+def acquista_equipaggio():
+    
+    print("------FASE 1: EQUIPAGGIO------")
+    print("è il momento di ingaggiare la tua flotta!!")
+    ruoli = [
+        {"nome": "cuoco", "prezzo": 15},
+        {"nome": "marinaio", "prezzo": 10},
+        {"nome": "meccanico", "prezzo": 15},
+        {"nome": "medico", "prezzo": 25},
+        {"nome": "navigatore", "prezzo": 20},
+    ]
+    
+    flotta = {r["nome"]: [] for r in ruoli}
+    acquistati = 0
+    ruoli_rimasti = len(ruoli)
 
-def on_btn_leave(e, btn):
-    btn.configure(bg=BTN_COLOR_2, fg=BTN_TEXT)
+    denari = 2000
+    print(f"Denari disponibili per l'ingaggio: {denari}")
 
-
-# ----------------------------------------------------------------------------
-# GIOCA → video → shop
-# ----------------------------------------------------------------------------
-def go_to_game():
-    """
-    Mostra una slideshow di immagini (se presenti) e poi apre lo shop.
-    Se non ci sono immagini, mantiene il fallback alla riproduzione video/esecuzione esterna.
-    """
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-
-    print("go_to_game called")
-    # Prova prima la slideshow di immagini (cartella IMAGE_FOLDER)
-    frames_dir = os.path.join(script_dir, IMAGE_FOLDER)
-    if pil_available and os.path.isdir(frames_dir):
-        img_files = sorted([f for f in os.listdir(frames_dir)
-                            if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))],
-                           key=natural_sort_key)
-        print(f"Trovati {len(img_files)} file immagine in {frames_dir}")
-        if img_files:
-            pil_frames = []
-            for fn in img_files:
-                try:
-                    img_path = os.path.join(frames_dir, fn)
-                    img = Image.open(img_path)
-                    img = resize_and_crop(img, (WIN_W, WIN_H))
-                    pil_frames.append(img)
-                except Exception as ex:
-                    print(f"Errore caricando immagine {fn}: {ex}")
-
-            print(f"Frame PIL caricati: {len(pil_frames)}")
-            if not pil_frames:
-                print("Nessun frame valido caricato dalla cartella, uso fallback video.")
-            else:
-                # Preconverti in PhotoImage per prestazioni
-                photo_frames = [ImageTk.PhotoImage(p) for p in pil_frames]
-
-                # Precompute crossfade blends per coppia di frame per evitare blocchi
-                root._slideshow_blends = []
-                if SLIDESHOW_CROSSFADE and len(pil_frames) > 1:
-                    steps = max(1, CROSSFADE_STEPS)
-                    try:
-                        for idx in range(len(pil_frames) - 1):
-                            a = pil_frames[idx]
-                            b = pil_frames[idx + 1]
-                            blended = []
-                            for s in range(1, steps + 1):
-                                alpha = s / steps
-                                try:
-                                    img_blend = Image.blend(a, b, alpha)
-                                except Exception:
-                                    img_blend = b
-                                blended.append(ImageTk.PhotoImage(img_blend))
-                            root._slideshow_blends.append(blended)
-                    except Exception as ex:
-                        print(f"Errore precomputing blend frames: {ex}")
-                        root._slideshow_blends = []
-
-                canvas.itemconfig("main", state="hidden")
-                settings_frame.place_forget()
-
-                slide_label = tk.Label(root, bg=BG_COLOR)
-                # Inserisco il label dentro il canvas per garantire la visibilità sopra gli altri elementi
-                slide_window = canvas.create_window(0, 0, anchor="nw", window=slide_label, width=WIN_W, height=WIN_H)
-
-                # Mantieni i riferimenti per evitare garbage-collection
-                root._slideshow_pil = pil_frames
-                root._slideshow_frames = photo_frames
-
-                def show_frame(i=0):
-                    if i >= len(photo_frames):
-                        try:
-                            slide_label.destroy()
-                        except Exception:
-                            pass
-                        try:
-                            canvas.delete(slide_window)
-                        except Exception:
-                            pass
-                        shop_path = os.path.join(script_dir, SHOP_SCRIPT)
-                        if os.path.exists(shop_path):
-                            try:
-                                subprocess.Popen([sys.executable, shop_path])
-                            except Exception as ex:
-                                print(f"Errore avviando shop: {ex}")
-                        quit_app()
-                        return
-
-                    # mostra il frame corrente
-                    slide_label.configure(image=photo_frames[i])
-                    slide_label.image = photo_frames[i]
-
-                    # Se abilitate le dissolvenze e c'è un frame successivo, esegui crossfade usando frame precomputati
-                    if SLIDESHOW_CROSSFADE and i + 1 < len(photo_frames):
-                        hold_time = max(0, FRAME_DELAY_MS - CROSSFADE_MS)
-
-                        def start_crossfade():
-                            if hasattr(root, '_slideshow_blends') and i < len(root._slideshow_blends):
-                                blended = root._slideshow_blends[i]
-                            else:
-                                blended = [photo_frames[i + 1]]
-
-                            # mantieni riferimenti temporanei sulla label
-                            slide_label._blend_frames = blended
-
-                            steps_local = max(1, len(blended))
-                            per_step_local = max(1, CROSSFADE_MS // steps_local)
-
-                            def do_blend(idx=0):
-                                if idx >= len(blended):
-                                    try:
-                                        del slide_label._blend_frames
-                                    except Exception:
-                                        pass
-                                    show_frame(i + 1)
-                                    return
-                                slide_label.configure(image=blended[idx])
-                                slide_label.image = blended[idx]
-                                root.after(per_step_local, lambda: do_blend(idx + 1))
-
-                            do_blend(0)
-
-                        root.after(hold_time, start_crossfade)
-                    else:
-                        root.after(FRAME_DELAY_MS, lambda: show_frame(i + 1))
-
-                show_frame(0)
-                return
-
-    # Se non ci sono immagini, torna al comportamento precedente (video / fallback)
-    if tkvideo_available and VIDEO_FILE:
-        video_path = os.path.join(script_dir, VIDEO_FILE)
-        if os.path.exists(video_path):
+    # Prima fase: almeno 1 per ruolo
+    for i in range(len(ruoli)):
+        valido = False
+        while not valido:
             try:
-                # Nasconde il menu principale
-                canvas.itemconfig("main", state="hidden")
-                settings_frame.place_forget()
-
-                # Prova a riprodurre con tkvideo se presente
-                try:
-                    video_label = tkvideo.Label(root, video_path, size=(WIN_W, WIN_H))
-                    video_label.pack(fill="both", expand=True)
-                    video_label.play()
-                except Exception as ex:
-                    print(f"Errore avviando tkvideo: {ex}")
-                    # Fallback: apri con player esterno
-                    root.withdraw()
-                    try:
-                        if sys.platform == "win32":
-                            os.startfile(video_path)
-                        else:
-                            opener = "open" if sys.platform == "darwin" else "xdg-open"
-                            subprocess.Popen([opener, video_path])
-                    except Exception as ex2:
-                        print(f"Errore aprendo il video: {ex2}")
-
-                # Bottone per saltare il video
-                def after_video():
-                    try:
-                        video_label.destroy()
-                    except Exception:
-                        pass
-                    try:
-                        skip_btn.destroy()
-                    except Exception:
-                        pass
-                    shop_path = os.path.join(script_dir, SHOP_SCRIPT)
-                    if os.path.exists(shop_path):
-                        try:
-                            subprocess.Popen([sys.executable, shop_path])
-                        except Exception as ex:
-                            print(f"Errore avviando shop: {ex}")
-                    quit_app()
-
-                skip_btn = tk.Button(root, text="Salta", command=after_video)
-                skip_btn.place(relx=0.98, rely=0.98, anchor="se")
-            except Exception as ex:
-                print(f"Errore durante riproduzione video: {ex}")
-                root.withdraw()
-                try:
-                    if sys.platform == "win32":
-                        os.startfile(video_path)
+                massimo = FLOTTA_MAX - acquistati - (ruoli_rimasti - 1)
+                n = int(input(f"Inserisci il numero di {ruoli[i]['nome']} (1-{massimo}): "))
+                if n < 1 or n > massimo:
+                    print(f"Numero non valido. Inserisci un valore tra 1 e {massimo}.")
+                else:
+                    costo = ruoli[i]["prezzo"] * n * 8
+                    if costo > denari:
+                        print(f"Denari insufficienti per {n} {ruoli[i]['nome']} (costo {costo}). Denari rimasti: {denari}")
                     else:
-                        opener = "open" if sys.platform == "darwin" else "xdg-open"
-                        subprocess.Popen([opener, video_path])
-                except Exception as ex2:
-                    print(f"Errore aprendo il video: {ex2}")
-                shop_path = os.path.join(script_dir, SHOP_SCRIPT)
-                if os.path.exists(shop_path):
-                    try:
-                        subprocess.Popen([sys.executable, shop_path])
-                    except Exception as ex:
-                        print(f"Errore avviando shop: {ex}")
-                quit_app()
+                        denari -= costo
+                        for _ in range(n):
+                            flotta[ruoli[i]["nome"]].append({"morale": 100, "pagato": True})
+                        acquistati += n
+                        ruoli_rimasti -= 1
+                        print(f"Assunti {n} {ruoli[i]['nome']}. Denari rimasti: {denari}")
+                        valido = True
+            except ValueError:
+                print("Inserisci un numero valido.")
+
+    # Fase opzionale: aggiungi altri membri fino al massimo
+    aggiungi_altro = True
+    while aggiungi_altro and acquistati < FLOTTA_MAX:
+        scelta_cont = input("Vuoi aggiungere altri personaggi? (s/n): ").strip().lower()
+        if scelta_cont == 'n':
+            aggiungi_altro = False
+        elif scelta_cont != 's':
+            print("Scelta non valida.")
         else:
-            print(f"Video non trovato: {video_path}")
-            shop_path = os.path.join(script_dir, SHOP_SCRIPT)
-            if os.path.exists(shop_path):
+            for idx, r in enumerate(ruoli, start=1):
+                print(f"{idx} - {r['nome']}")
+            scelta_valida = False
+            while not scelta_valida:
                 try:
-                    subprocess.Popen([sys.executable, shop_path])
-                except Exception as ex:
-                    print(f"Errore avviando shop: {ex}")
-            quit_app()
-    else:
-        # Fallback: comportamento originale
-        root.withdraw()
-        if VIDEO_FILE:
-            video_path = os.path.join(script_dir, VIDEO_FILE)
-            if os.path.exists(video_path):
-                try:
-                    if sys.platform == "win32":
-                        os.startfile(video_path)
+                    scelta = int(input("Scegli il numero del personaggio: "))
+                    if scelta < 1 or scelta > len(ruoli):
+                        print("Scelta non valida.")
                     else:
-                        opener = "open" if sys.platform == "darwin" else "xdg-open"
-                        subprocess.Popen([opener, video_path])
-                except Exception as ex:
-                    print(f"Errore aprendo il video: {ex}")
-            else:
-                print(f"Video non trovato: {video_path}")
-        shop_path = os.path.join(script_dir, SHOP_SCRIPT)
-        if os.path.exists(shop_path):
-            try:
-                subprocess.Popen([sys.executable, shop_path])
-            except Exception as ex:
-                print(f"Errore avviando shop: {ex}")
-        quit_app()
+                        scelta_valida = True
+                except ValueError:
+                    print("Inserisci un numero valido.")
+            massimo = FLOTTA_MAX - acquistati
+            n_valido = False
+            while not n_valido:
+                try:
+                    n = int(input(f"Quanti {ruoli[scelta-1]['nome']} vuoi aggiungere? (1-{massimo}): "))
+                    if n < 1 or n > massimo:
+                        print(f"Numero non valido. Inserisci un valore tra 1 e {massimo}.")
+                    else:
+                        costo = ruoli[scelta-1]["prezzo"] * n * 8
+                        if costo > denari:
+                            print(f"Denari insufficienti per {n} {ruoli[scelta-1]['nome']} (costo {costo}). Denari rimasti: {denari}")
+                        else:
+                            denari -= costo
+                            for _ in range(n):
+                                flotta[ruoli[scelta-1]['nome']].append({"morale": 100, "pagato": True})
+                            acquistati += n
+                            print(f"Assunti {n} {ruoli[scelta-1]['nome']}. Denari rimasti: {denari}")
+                            n_valido = True
+                except ValueError:
+                    print("Inserisci un numero valido.")
+
+    print("\nFlotta finale:")
+    tot = 0
+    for v in flotta.values():
+        tot += len(v)
+    for k, v in flotta.items():
+        print(f"  {k}: {len(v)}")
+    print(f"Totale membri: {tot}/{FLOTTA_MAX}")
+    return flotta, denari
 
 
-# ----------------------------------------------------------------------------
-# USCITA
-# ----------------------------------------------------------------------------
-def exit_app():
-    root.after(120, quit_app)
+def acquista_provviste(denari):
+    print("------FASE 2: PROVVISTE------")
+    provviste_list = [
+        {"nome": "verdura", "um": "kg", "prezzo": 0.5},
+        {"nome": "frutta", "um": "kg", "prezzo": 1},
+        {"nome": "carne", "um": "kg", "prezzo": 2},
+        {"nome": "acqua", "um": "barili", "prezzo": 0.5},
+    ]
+    provviste = {p["nome"]: 0.0 for p in provviste_list}
+    print(f"Denari disponibili: {denari}")
+    acquistando = True
+    while acquistando:
+        scelta = input("Vuoi acquistare provviste? (s/n): ").strip().lower()
+        if scelta == 'n':
+            acquistando = False
+        elif scelta != 's':
+            print("Scelta non valida.")
+        else:
+            for i, p in enumerate(provviste_list, start=1):
+                print(f"{i} - {p['nome']} : {p['prezzo']} per {p['um']}")
+            valido_merce = False
+            while not valido_merce:
+                try:
+                    num = int(input("Inserisci il numero della provvista: "))
+                    qty = float(input("Quanti (minimo 1): "))
+                    if num < 1 or num > len(provviste_list) or qty < 1:
+                        print("Hai inserito un numero o una quantità non valida.")
+                    else:
+                        costo = provviste_list[num-1]["prezzo"] * qty
+                        if costo > denari:
+                            print("Denari insufficienti.")
+                        else:
+                            denari -= costo
+                            provviste[provviste_list[num-1]["nome"]] += qty
+                            print(f"Acquistati {qty} {provviste_list[num-1]['um']} di {provviste_list[num-1]['nome']}. Denari rimasti: {denari}")
+                            continua_acquisto = input("Vuoi acquistare altre provviste s/n: ").strip().lower()
+                            while continua_acquisto != 's' and continua_acquisto != 'n':
+                                print("Inserisci una scelta valida!!")
+                                continua_acquisto = input("Vuoi acquistare altre provviste s/n: ").strip().lower()
+                            if continua_acquisto == 'n':
+                                valido_merce = True
+                                acquistando = False
+                            else:
+                                valido_merce = True
+                except ValueError:
+                    print("Inserisci un numero valido.")
+    return denari, provviste
 
-def quit_app():
-    pygame.quit()
-    root.destroy()
-    sys.exit()
+
+def acquista_merci(denari):
+    print("------FASE 3: MERCI------")
+    merci_list = [
+        {"key": "medicinali", "descr": "bottiglie di medicinale", "prezzo": 1, "um": "bottiglia"},
+        {"key": "armi", "descr": "armi", "prezzo": 5, "um": "pezzo"},
+        {"key": "sale", "descr": "sale", "prezzo": 0.5, "um": "sacco"},
+        {"key": "stoffa", "descr": "stoffa", "prezzo": 2, "um": "telo"},
+        {"key": "coltelli", "descr": "coltelli", "prezzo": 0.5, "um": "pezzo"},
+        {"key": "diamanti", "descr": "diamanti", "prezzo": 1, "um": "pezzo"},
+    ]
+    merci = {}
+    for m in merci_list:
+        merci[m["key"]] = 0.0
+    print(f"Denari disponibili: {denari}")
+    acquistando = True
+    while acquistando:
+        scelta = input("Vuoi acquistare merci? (s/n): ").strip().lower()
+        if scelta == 'n':
+            acquistando = False
+        elif scelta != 's':
+            print("Scelta non valida.")
+        else:
+            for i, m in enumerate(merci_list, start=1):
+                print(f"{i} - {m['descr']} : {m['prezzo']} per {m['um']}")
+            valido_merce = False
+            while not valido_merce:
+                try:
+                    num = int(input("Inserisci il numero della merce: "))
+                    qty = float(input("Inserisci la quantità (minimo 1): "))
+                    if num < 1 or num > len(merci_list) or qty < 1:
+                        print("Hai inserito un numero o una quantità non valida.")
+                    else:
+                        costo = merci_list[num-1]["prezzo"] * qty
+                        if costo > denari:
+                            print("Denari insufficienti.")
+                        else:
+                            denari -= costo
+                            merci[merci_list[num-1]["key"]] += qty
+                            print(f"Acquistati {qty} {merci_list[num-1]['um']} di {merci_list[num-1]['descr']}. Denari rimasti: {denari}")
+                            continua_acq = input("Vuoi acquistare altre merci s/n: ").strip().lower()
+                            while continua_acq != 's' and continua_acq != 'n':
+                                print("Inserisci una scelta valida!!")
+                                continua_acq = input("Vuoi acquistare altre merci s/n: ").strip().lower()
+                            if continua_acq == 'n':
+                                valido_merce = True
+                                acquistando = False
+                            else:
+                                valido_merce = True
+                except ValueError:
+                    print("Inserisci un numero valido.")
+    return denari, merci
 
 
-# ----------------------------------------------------------------------------
-# AUDIO
-# ----------------------------------------------------------------------------
-def on_volume_change(val):
-    v = int(float(val))
-    vol_label.configure(text=f"{v}%")
-    settings["volume_musica"] = v
-    save_settings(settings)
+def salva_partita_su_file(stato, filename="salvataggio.json"):
+    try:
+        with open(filename, 'w') as f:
+            json.dump(stato, f, indent=2)
+        print(f"Partita salvata su '{filename}'.")
+    except Exception as e:
+        print(f"Errore durante il salvataggio: {e}")
 
-def toggle_sfx():
-    global sfx_on
-    sfx_on = not sfx_on
-    if sfx_on:
-        pygame.mixer.unpause()
+
+def carica_partita_da_file(filename="salvataggio.json"):
+    try:
+        with open(filename, 'r') as f:
+            stato = json.load(f)
+        print(f"Caricamento da '{filename}' riuscito.")
+        return stato
+    except FileNotFoundError:
+        print("Nessun salvataggio trovato.")
+        return {}
+    except Exception as e:
+        print(f"Errore durante il caricamento: {e}")
+        return {}
+
+
+def shop():
+    denari = 2000
+    flotta, denari = acquista_equipaggio()
+    denari, provviste = acquista_provviste(denari)
+    denari, merci = acquista_merci(denari)
+    print(f"Perfetto, ora sei pronto per il viaggio!! Denari rimasti: {denari}")
+    return flotta, provviste, merci, denari
+
+
+def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattivo=True):
+    eventi = [
+        {"nome": "Uomo in mare", "ripetibile": False, "peso": 1},
+        {"nome": "Verdura in mare", "ripetibile": False, "peso": 2},
+        {"nome": "Frutta in mare", "ripetibile": False, "peso": 2},
+        {"nome": "Carne in mare", "ripetibile": False, "peso": 2},
+        {"nome": "Acqua in mare", "ripetibile": False, "peso": 2},
+        {"nome": "Pesca miracolosa", "ripetibile": False, "peso": 1},
+        {"nome": "Tempesta miracolosa", "ripetibile": False, "peso": 1},
+        {"nome": "Venti favorevoli", "ripetibile": True, "peso": 3},
+        {"nome": "Cattivo tempo", "ripetibile": False, "peso": 2},
+        {"nome": "Ondata", "ripetibile": False, "peso": 1},
+        {"nome": "Infestazione ratti", "ripetibile": False, "peso": 2},
+        {"nome": "Avvistamento albatro", "ripetibile": True, "limite": 3, "peso": 2},
+        {"nome": "Avvistamento scialuppa", "ripetibile": False, "peso": 1},
+        {"nome": "Epidemia", "ripetibile": False, "peso": 1},
+        {"nome": "Attacco pirata", "ripetibile": False, "peso": 1},
+        {"nome": "Danni al timone", "ripetibile": False, "peso": 2},
+        {"nome": "Raffiche di vento", "ripetibile": False, "peso": 2},
+        {"nome": "Avvistamento isola", "ripetibile": False, "peso": 1},
+        {"nome": "Nessun imprevisto", "ripetibile": True, "peso": 3},
+    ]
+
+    # inizializza stato: usa lo stato caricato se presente
+    if stato and isinstance(stato, dict):
+        settimana_corrente = stato.get("settimana_corrente", 1)
+        conta_eventi = stato.get("conta_eventi", {})
+        storia_eventi = stato.get("storia_eventi", [])
     else:
-        pygame.mixer.pause()
-    settings["effetti_sonori"] = sfx_on
-    save_settings(settings)
+        settimana_corrente = 1
+        conta_eventi = {}
+        storia_eventi = []
+    stima_iniziale = settimane_totali
+
+    # Stato extra
+    razioni = {"verdura": 1.0, "frutta": 1.0, "carne": 1.0, "acqua": 1.0}
+    albatro_avvistamenti = 0
+    albatro_ucciso = False
+
+    print("-------BENVENUTI-------")
+    print("SI DA IL VIA AL VIAGGIO")
+    print("-----BUONA FORTUNA-----")
+    print(f"Durata stimata: {settimane_totali} settimane")
+
+    # Assicuriamoci che le provviste siano presenti
+    for key in ("verdura", "frutta", "carne", "acqua"):
+        if key not in provviste:
+            provviste[key] = 0.0
+
+    def frazione_a_testo(frazione):
+        d = frazione - 0.5
+        if d < 0:
+            d = -d
+        if d < 1e-9:
+            return "1/2"
+        d = frazione - (1/3)
+        if d < 0:
+            d = -d
+        if d < 1e-9:
+            return "1/3"
+        d = frazione - 0.25
+        if d < 0:
+            d = -d
+        if d < 1e-9:
+            return "1/4"
+        d = frazione - 0.2
+        if d < 0:
+            d = -d
+        if d < 1e-9:
+            return "1/5"
+        return f"{int(frazione * 100)}%"
+
+    def conta_membri_vivi():
+        totale = 0
+        for lista in flotta.values():
+            totale += len(lista)
+        return totale
+
+    def scegli_evento():
+        disponibili = []
+        pesi = []
+        for e in eventi:
+            nome = e["nome"]
+            occorrenze = conta_eventi.get(nome, 0)
+            aggiungi = True
+            if not e.get("ripetibile", False) and occorrenze > 0:
+                aggiungi = False
+            if e.get("limite") is not None and occorrenze >= e["limite"]:
+                aggiungi = False
+            if aggiungi:
+                disponibili.append(e)
+                pesi.append(e.get("peso", 1))
+        if not disponibili:
+            return random.choice(eventi)
+        return random.choices(disponibili, weights=pesi, k=1)[0]
+
+    def rimuovi_membro_casuale():
+        ruoli_disponibili = []
+        for r, lst in flotta.items():
+            if len(lst) > 0:
+                ruoli_disponibili.append(r)
+        if len(ruoli_disponibili) == 0:
+            return "", {}
+        ruolo = random.choice(ruoli_disponibili)
+        idx = random.randrange(len(flotta[ruolo]))
+        membro = flotta[ruolo].pop(idx)
+        return ruolo, membro
+
+    def aggiungi_membro(ruolo, morale, pagato):
+        if ruolo not in flotta:
+            flotta[ruolo] = []
+        flotta[ruolo].append({"morale": morale, "pagato": pagato})
+
+    def rimuovi_n_membri_non_medici(n):
+        rimossi = []
+        while n > 0:
+            candidati = []
+            for r in flotta.keys():
+                if r != "medico" and len(flotta[r]) > 0:
+                    candidati.append(r)
+            if len(candidati) == 0:
+                n = 0
+            else:
+                ruolo = random.choice(candidati)
+                idx = random.randrange(len(flotta[ruolo]))
+                flotta[ruolo].pop(idx)
+                rimossi.append(ruolo)
+                n -= 1
+        return rimossi
+
+    def gestisci_evento(evt):
+        nonlocal albatro_avvistamenti, albatro_ucciso, settimane_totali
+        nome = evt["nome"]
+        conta_eventi[nome] = conta_eventi.get(nome, 0) + 1
+        storia_eventi.append(nome)
+        data_e_ora = str(datetime.now())
+        print(f"[{data_e_ora}] Settimana {settimana_corrente}: {nome}")
+        risultato = {}
+
+        if nome == "Uomo in mare":
+            ruolo, membro = rimuovi_membro_casuale()
+            if ruolo == "":
+                print("Non c'era nessuno a bordo da perdere.")
+            else:
+                print(f"Tragico: un {ruolo} è finito in mare e non ce l'ha fatta.")
+                risultato["morto"] = ruolo
+            return risultato
+
+        if nome in ("Verdura in mare", "Frutta in mare", "Carne in mare", "Acqua in mare"):
+            fraz = random.choice([0.5, 1/3, 0.25, 0.2])
+            tipo = nome.split()[0].lower()
+            quantita = provviste.get(tipo, 0)
+            perdita = quantita * fraz
+            nuovo_val = quantita - perdita
+            if nuovo_val < 0.0:
+                nuovo_val = 0.0
+            provviste[tipo] = nuovo_val
+            print(f"Perdita di {frazione_a_testo(fraz)} della scorta ({tipo}): -{perdita:.2f} {tipo}.")
+            risultato["perdita_tipo"] = tipo
+            risultato["perdita_frac"] = fraz
+            risultato["perdita_qty"] = perdita
+            return risultato
+
+        if nome == "Pesca miracolosa":
+            kg = random.randint(11, 20)
+            provviste["carne"] = provviste.get("carne", 0) + kg
+            print(f"Pesca miracolosa: raccolti circa {kg} kg di pesce (aggiunti a 'carne').")
+            risultato["pesca_kg"] = kg
+            risultato["morale_variazione"] = 5
+            return risultato
+
+        if nome == "Tempesta miracolosa":
+            # Alcuni uomini raccolgono acqua nei barili vuoti: aumento acqua
+            aggiunta = random.randint(11, 20)
+            provviste["acqua"] = provviste.get("acqua", 0) + aggiunta
+            print(f"Tempesta miracolosa: alcuni membri hanno raccolto acqua! +{aggiunta} barili.")
+            risultato["acqua_aggiunta"] = aggiunta
+            return risultato
+
+        if nome == "Venti favorevoli":
+            morale_gain = random.randint(5, 15)
+            if settimane_totali - settimana_corrente >= 1:
+                print(f"Venti favorevoli: il viaggio procede più velocemente (-1 settimana). Morale +{morale_gain}.")
+                risultato["accorcia_settimane"] = 1
+                risultato["morale_variazione"] = morale_gain
+            else:
+                print(f"Venti favorevoli, ma il beneficio è minimo. Morale +{morale_gain}.")
+                risultato["morale_variazione"] = morale_gain
+            return risultato
+
+        if nome == "Cattivo tempo":
+            # Parte delle bottiglie di medicinale si rovescia
+            fraz = random.choice([0.5, 1/3, 0.25, 0.2])
+            perdita = merci.get("medicinali", 0) * fraz
+            nuovo_med = merci.get("medicinali", 0) - perdita
+            if nuovo_med < 0:
+                nuovo_med = 0
+            merci["medicinali"] = nuovo_med
+            print(f"Cattivo tempo: parte delle bottiglie di medicinale si rovescia (-{frazione_a_testo(fraz)}). Perduta: {perdita:.2f}.")
+            risultato["perdita_medicinali"] = perdita
+            risultato["morale_variazione"] = -3
+            return risultato
+
+        if nome == "Ondata":
+            # Un'onda altissima abbatte una parte delle armi in mare
+            fraz = random.choice([0.5, 1/3, 0.25, 0.2])
+            perdita = merci.get("armi", 0) * fraz
+            nuovo_armi = merci.get("armi", 0) - perdita
+            if nuovo_armi < 0:
+                nuovo_armi = 0
+            merci["armi"] = nuovo_armi
+            print(f"Ondata: parte delle armi è finita in mare (-{frazione_a_testo(fraz)}). Perduta: {perdita:.2f}.")
+            risultato["onde_perdita_frac"] = fraz
+            risultato["onde_perdita_tipo"] = "armi"
+            risultato["morale_variazione"] = -3
+            return risultato
+
+        if nome == "Infestazione ratti":
+            # I ratti rovinano principalmente la stoffa
+            fraz = random.choice([0.5, 1/3, 0.25, 0.2])
+            perdita = merci.get("stoffa", 0) * fraz
+            if perdita > 0:
+                nuovo_stoffa = merci.get("stoffa", 0) - perdita
+                if nuovo_stoffa < 0:
+                    nuovo_stoffa = 0
+                merci["stoffa"] = nuovo_stoffa
+            print("Infestazione di ratti: alcune stoffe sono state rovinate.")
+            risultato["ratti"] = [("stoffa", perdita)] if perdita > 0 else []
+            risultato["morale_variazione"] = -2
+            return risultato
+
+        if nome == "Avvistamento albatro":
+            albatro_avvistamenti += 1
+            print("Albatro avvistato: buon auspicio per l'equipaggio.")
+            risultato["albatro_avvistato"] = True
+            if int(merci.get("armi", 0)) >= 1 and conta_membri_vivi() > 0:
+                print("Hai armi a bordo. Puoi provare a sparare all'albatro per ottenere carne.")
+                print("Attenzione: le armi usate non potranno essere barattate e saranno rimosse dalle merci.")
+                scelta = input("Vuoi provare a sparare all'albatro? (s/n): ").strip().lower()
+                if scelta == 's':
+                    num_armi = int(merci.get("armi", 0))
+                    membri_vivi = conta_membri_vivi()
+                    if num_armi < membri_vivi:
+                        tentativi = num_armi
+                    else:
+                        tentativi = membri_vivi
+                    print(f"Hai a disposizione {tentativi} colpi (min(numero armi, membri vivi)).")
+                    colpi = tentativi
+                    successi = 0
+                    for _ in range(colpi):
+                        if random.random() < 0.5:
+                            successi += 1
+                    nuovo_armi = merci.get("armi", 0) - colpi
+                    if nuovo_armi < 0:
+                        nuovo_armi = 0
+                    merci["armi"] = nuovo_armi
+                    risultato["armi_usate"] = colpi
+                    if successi > 0:
+                        aggiunta_carne = random.randint(10, 15)
+                        provviste["carne"] = provviste.get("carne", 0) + aggiunta_carne
+                        print(f"Albatro abbattuto! +{aggiunta_carne} kg di carne.")
+                        albatro_ucciso = True
+                        risultato["albatro_ucciso"] = True
+                    else:
+                        print("Hai sparato ma l'albatro non è stato abbattuto.")
+                        risultato["albatro_ucciso"] = False
+                else:
+                    print("Hai deciso di non sparare all'albatro.")
+            else:
+                print("Non ci sono armi o non ci sono abbastanza persone per provare a sparare.")
+            return risultato
+
+        if nome == "Avvistamento scialuppa":
+            print("Scialuppa alla deriva con 4 uomini e una cassa: vuoi salvare i naufraghi?")
+            scelta = input("Salvare i 4 uomini? (s/n): ").strip().lower()
+            if scelta == 's':
+                ruoli_possibili = list(flotta.keys())
+                for _ in range(4):
+                    ruolo = random.choice(ruoli_possibili)
+                    morale_nuovo = random.randint(25, 75)
+                    aggiungi_membro(ruolo, morale_nuovo, False)
+                # cassa: aggiunge merci (non provviste) 10-20 unità
+                for k in list(merci.keys()):
+                    if k in ("medicinali", "armi", "sale", "stoffa", "coltelli", "diamanti"):
+                        aggiunta = random.randint(10, 20)
+                        merci[k] = merci.get(k, 0) + aggiunta
+                print("Hai salvato 4 uomini; sono stati aggiunti alla flotta (non pagati). Cassa svuotata nelle merci.")
+                risultato["scialuppa_salvata"] = 4
+            else:
+                print("Hai lasciato la scialuppa al largo. Niente saldo.")
+            return risultato
+
+        if nome == "Epidemia":
+            # Ogni non-medico ha il 70% di contrarre l'epidemia
+            lista_malati = []
+            for ruolo, membri in list(flotta.items()):
+                if ruolo != "medico":
+                    for idx in range(len(membri)):
+                        if random.random() < 0.7:
+                            lista_malati.append(ruolo)
+            if not lista_malati:
+                print("Epidemia: nessuno si è ammalato in modo fatale.")
+                risultato["ammalati"] = 0
+                return risultato
+            medici = len(flotta.get("medico", []))
+            medicinali_disponibili = int(merci.get("medicinali", 0))
+            ammalati = len(lista_malati)
+            curati = 0
+            morti = []
+            if medici > 0 and medicinali_disponibili > 0:
+                if ammalati < medicinali_disponibili:
+                    curabili = ammalati
+                else:
+                    curabili = medicinali_disponibili
+                nuovo_med = merci.get("medicinali", 0) - curabili
+                if nuovo_med < 0:
+                    nuovo_med = 0
+                merci["medicinali"] = nuovo_med
+                curati = curabili
+                da_odiare = ammalati - curati
+                if da_odiare > 0:
+                    morti = rimuovi_n_membri_non_medici(da_odiare)
+            else:
+                # tutti gli ammalati muoiono
+                morti = rimuovi_n_membri_non_medici(ammalati)
+            print(f"Epidemia: ammalati {ammalati}, curati {curati}, morti {len(morti)}. Medicinali rimanenti: {int(merci.get('medicinali',0))}")
+            risultato["ammalati"] = ammalati
+            risultato["curati"] = curati
+            risultato["morti"] = morti
+            return risultato
+
+        if nome == "Attacco pirata":
+            numero_pirati = random.randint(3, 10)
+            membri_vivi = conta_membri_vivi()
+            num_armi = int(merci.get("armi", 0))
+            if num_armi < membri_vivi:
+                numero_difensori = num_armi
+            else:
+                numero_difensori = membri_vivi
+            # Le armi usate vengono consumate
+            nuovo_armi = merci.get("armi", 0) - numero_difensori
+            if nuovo_armi < 0:
+                nuovo_armi = 0
+            merci["armi"] = nuovo_armi
+            uomini_persi_calc = numero_pirati - numero_difensori
+            perdite = []
+            if uomini_persi_calc > 0:
+                if uomini_persi_calc < membri_vivi:
+                    uomini_persi = uomini_persi_calc
+                else:
+                    uomini_persi = membri_vivi
+                for _ in range(uomini_persi):
+                    ruolo, membro = rimuovi_membro_casuale()
+                    if ruolo:
+                        perdite.append(ruolo)
+                print(f"Attacco pirata! Persi {len(perdite)} membri.")
+            else:
+                print("Attacco pirata respinto senza vittime!")
+            perdite_merci = []
+            for k in list(merci.keys()):
+                perdita = merci[k] * random.choice([0.0, 0.1, 0.25])
+                if perdita > 0:
+                    nuovo_k = merci[k] - perdita
+                    if nuovo_k < 0:
+                        nuovo_k = 0
+                    merci[k] = nuovo_k
+                    perdite_merci.append((k, perdita))
+            risultato["pirati_morti"] = perdite
+            risultato["pirati_perdite_merci"] = perdite_merci
+            risultato["armi_usate"] = numero_difensori
+            return risultato
+
+        if nome == "Danni al timone":
+            print("Danni al timone: servono riparazioni.")
+            if len(flotta.get("meccanico", [])) > 0:
+                print("C'è un meccanico a bordo: riparazione più veloce (+1 settimana).")
+                risultato["aggiungi_settimane"] = 1
+            else:
+                aggiungi = random.randint(2, 4)
+                print(f"Nessun meccanico: riparazione lunga (+{aggiungi} settimane).")
+                risultato["aggiungi_settimane"] = aggiungi
+            risultato["morale_variazione"] = -3
+            return risultato
+
+        if nome == "Raffiche di vento":
+            print("Raffiche di vento: rotta allungata e difficoltà.")
+            if len(flotta.get("navigatore", [])) > 0:
+                print("C'è un navigatore: impatto ridotto (+1 settimana).")
+                risultato["aggiungi_settimane"] = 1
+            else:
+                aggiungi = random.randint(2, 4)
+                print(f"Nessun navigatore: devi allungare la rotta (+{aggiungi} settimane).")
+                risultato["aggiungi_settimane"] = aggiungi
+            risultato["morale_variazione"] = -3
+            return risultato
+
+        if nome == "Avvistamento isola":
+            print("Isola avvistata: vuoi approdare per ispezionare?")
+            scelta = input("Approdi sull'isola? (s/n): ").strip().lower()
+            if scelta != 's':
+                print("Decidi di non approdare.")
+                return risultato
+            # isola: 50% abitata
+            if random.random() < 0.5:
+                print("L'isola non è abitata. Nulla di fatto, ma tempo perso.")
+                settimane_totali += random.randint(1, 2)
+                risultato["aggiungi_settimane"] = 1
+                return risultato
+            # abitata
+            if random.random() < 0.5:
+                print("Gli abitanti sono ostili e mettono in fuga l'equipaggio.")
+                settimane_totali += random.randint(1, 2)
+                risultato["aggiungi_settimane"] = 1
+                return risultato
+            # abitata e amichevole
+            print("Isola amichevole: gli isolani donano merci.")
+            bonus_min = 5
+            bonus_max = 20
+            # se c'è stato almeno un avvistamento di albatro e nessuno è stato ucciso, premio maggiore
+            if albatro_avvistamenti > 0 and not albatro_ucciso:
+                bonus_min = 20
+                bonus_max = 40
+            for k in list(merci.keys()):
+                if k in ("medicinali", "armi", "sale", "stoffa", "coltelli", "diamanti"):
+                    aggiunta = random.randint(bonus_min, bonus_max)
+                    merci[k] = merci.get(k, 0) + aggiunta
+            settimane_totali += random.randint(1, 2)
+            risultato["isola_donazioni"] = True
+            risultato["morale_variazione"] = 5
+            return risultato
+
+        if nome == "Nessun imprevisto":
+            print("Settimana tranquilla: nessun imprevisto.")
+            return risultato
+
+        print("Evento non gestito.")
+        return risultato
+
+    def anima_nave():
+        pista = 20
+        passi = pista + 1
+        durata_settimana = 2.0  # secondi per settimana (ridotto per test più veloci)
+        ritardo = durata_settimana / passi
+        meta = passi // 2
+        for posizione in range(passi):
+            onde = "~" * posizione
+            print(f"{onde}⛵")
+            if posizione == meta:
+                risposta_valida = False
+                while not risposta_valida:
+                    risposta = input("Vuoi saltare questa settimana? (y/n): ").strip().lower()
+                    if risposta == 'y':
+                        return True
+                    elif risposta == 'n':
+                        risposta_valida = True
+                    else:
+                        print("Rispondi 'y' per sì oppure 'n' per no.")
+                time.sleep(ritardo)
+            else:
+                time.sleep(ritardo)
+        return False
+
+    risultati = []
+    while settimana_corrente <= settimane_totali:
+        print(f"--- SETTIMANA {settimana_corrente} di {settimane_totali} ---")
+        evento_scelto = scegli_evento()
+        risultato = gestisci_evento(evento_scelto)
+        risultati.append({"settimana": settimana_corrente, "evento": evento_scelto["nome"], "risultato": risultato})
+
+        # Se tutta la flotta è stata annientata, termina la partita
+        totale_membri = 0
+        for lista in flotta.values():
+            totale_membri += len(lista)
+        if totale_membri <= 0:
+            print("Tutti i membri della flotta sono morti. Il viaggio è fallito. GAME OVER")
+            return {"settimane": settimane_totali, "risultati": risultati, "conteggi": conta_eventi, "storia": storia_eventi, "morto": True}
+
+        # applica modifiche temporali
+        if "aggiungi_settimane" in risultato:
+            aggiungi = risultato["aggiungi_settimane"]
+            settimane_totali += aggiungi
+            print(f"Il viaggio si allunga di {aggiungi} settimana/e. Nuova durata stimata: {settimane_totali} settimane.")
+        if "accorcia_settimane" in risultato:
+            acc = risultato["accorcia_settimane"]
+            nuovo_val = settimane_totali - acc
+            if nuovo_val < settimana_corrente:
+                settimane_totali = settimana_corrente
+            else:
+                settimane_totali = nuovo_val
+            print(f"Il viaggio si accorcia di {acc} settimana/e. Nuova durata stimata: {settimane_totali} settimane.")
+
+        # applica variazione di morale a tutti i membri, se presente
+        if "morale_variazione" in risultato:
+            varia = risultato["morale_variazione"]
+            if varia != 0:
+                for lista in flotta.values():
+                    for membro in lista:
+                        membro_morale = membro.get("morale", 0)
+                        nuovo = membro_morale + varia
+                        if nuovo > 100:
+                            nuovo = 100
+                        if nuovo < 0:
+                            nuovo = 0
+                        membro["morale"] = nuovo
+                print(f"Morale modificato di {varia} per tutti i membri.")
+
+        if interattivo:
+            saltata = anima_nave()
+            if saltata:
+                print("Settimana saltata dall'utente.")
+        else:
+            print("(modalità non interattiva: salto animazione)")
+
+        # Alla fine della settimana (esclusa l'ultima) offrire salvataggio
+        if interattivo and settimana_corrente < settimane_totali:
+            scelta_salvataggio_valida = False
+            while not scelta_salvataggio_valida:
+                scelta_salva = input("Vuoi salvare la partita? (s/n): ").strip().lower()
+                if scelta_salva == 's':
+                    stato_da_salvare = {
+                        'flotta': flotta,
+                        'provviste': provviste,
+                        'merci': merci,
+                        'settimane_totali': settimane_totali,
+                        'settimana_corrente': settimana_corrente,
+                        'conta_eventi': conta_eventi,
+                        'storia_eventi': storia_eventi,
+                        'albatro_avvistamenti': albatro_avvistamenti,
+                        'albatro_ucciso': albatro_ucciso,
+                    }
+                    salva_partita_su_file(stato_da_salvare)
+                    scelta_salvataggio_valida = True
+                elif scelta_salva == 'n':
+                    scelta_salvataggio_valida = True
+                else:
+                    print("Scelta non valida. Rispondi 's' o 'n'.")
+
+        settimana_corrente += 1
+
+    print("RIEPILOGO DEL VIAGGIO")
+    for nome, cnt in conta_eventi.items():
+        print(f"- {nome}: {cnt} volta/e")
+    print("Stato finale flotta:")
+    for k, v in flotta.items():
+        print(f"  {k}: {v}")
+    print("Stato finale provviste:")
+    for k, v in provviste.items():
+        print(f"  {k}: {v:.2f}")
+    print("Stato finale merci:")
+    for k, v in merci.items():
+        print(f"  {k}: {v:.2f}")
+    print("Simulazione completata.")
+    return {"settimane": settimane_totali, "risultati": risultati, "conteggi": conta_eventi, "storia": storia_eventi}
 
 
-# ----------------------------------------------------------------------------
-# ASSETS
-# ----------------------------------------------------------------------------
-def load_assets():
-    global bg_img
-    bg_path = "assets_gioconave/wmremove-transformed.png"
-    if pil_available and os.path.exists(bg_path):
-        img = Image.open(bg_path).resize((WIN_W, WIN_H), Image.LANCZOS)
-        bg_img = ImageTk.PhotoImage(img)
+def main():
+    mostra_menu_principale()
+    scelta_corretta = False
+    while not scelta_corretta:
+        scelta = input("Benvenuto in NUOVO MONDO!! Scegli: ").strip()
+        if scelta == "1":
+            scelta_corretta = True
+            flotta, provviste, merci, denari = shop()
+            viaggio(flotta, provviste, merci, settimane_totali=8, interattivo=True)
+        elif scelta == "2":
+            scelta_corretta = True
+            stato = carica_partita_da_file()
+            if not stato:
+                print("Nessun salvataggio trovato. Avvio nuova partita.")
+                flotta, provviste, merci, denari = shop()
+                viaggio(flotta, provviste, merci, settimane_totali=8, interattivo=True)
+            else:
+                loaded_flotta = stato.get('flotta', {})
+                loaded_provviste = stato.get('provviste', {})
+                loaded_merci = stato.get('merci', {})
+                settimane_totali = stato.get('settimane_totali', 8)
+                viaggio(loaded_flotta, loaded_provviste, loaded_merci, settimane_totali=settimane_totali, stato=stato, interattivo=True)
+        else:
+            print("Errore d'inserimento")
 
 
-# ----------------------------------------------------------------------------
-# HELPER UI
-# ----------------------------------------------------------------------------
-def create_separator(parent):
-    line = tk.Frame(parent, height=1, bg=BTN_COLOR_2, width=320)
-    line.pack(pady=6)
-
-def create_menu_btn(parent, text, command):
-    btn = tk.Button(
-        parent, text=text, font=FONT_BTN,
-        fg=BTN_TEXT, bg=BTN_COLOR_2,
-        activebackground=BTN_COLOR_1, activeforeground=BG_COLOR,
-        width=22, height=1, relief="flat", borderwidth=0,
-        cursor="hand2", command=command,
-    )
-    btn.pack(pady=6, ipadx=10, ipady=8)
-    btn.bind("<Enter>", lambda e, b=btn: on_btn_enter(e, b))
-    btn.bind("<Leave>", lambda e, b=btn: on_btn_leave(e, b))
-    return btn
-
-def create_canvas_button(x, y, text, command):
-    rect = canvas.create_rectangle(
-        x - 110, y - 15, x + 110, y + 15,
-        fill=BTN_COLOR_2, outline=BTN_COLOR_1, width=2, tags="main"
-    )
-    txt = canvas.create_text(
-        x, y, text=text, font=FONT_BTN,
-        fill=BTN_TEXT, anchor="center", tags="main"
-    )
-
-    def on_enter(e):
-        canvas.itemconfig(rect, fill=BTN_HOVER, outline=BTN_HOVER)
-        canvas.itemconfig(txt, fill=BG_COLOR)
-
-    def on_leave(e):
-        canvas.itemconfig(rect, fill=BTN_COLOR_2, outline=BTN_COLOR_1)
-        canvas.itemconfig(txt, fill=BTN_TEXT)
-
-    def on_click(e):
-        command()
-
-    for item in [rect, txt]:
-        canvas.tag_bind(item, "<Enter>", on_enter)
-        canvas.tag_bind(item, "<Leave>", on_leave)
-        canvas.tag_bind(item, "<Button-1>", on_click)
-
-
-# ----------------------------------------------------------------------------
-# BUILD MENU PRINCIPALE
-# ----------------------------------------------------------------------------
-def build_main_menu():
-    btn_y = 210
-    for testo, funzione in [
-        ("GIOCA",        go_to_game),
-        ("IMPOSTAZIONI", go_to_settings),
-        ("ESCI",         exit_app),
-    ]:
-        create_canvas_button(WIN_W // 2, btn_y, testo, funzione)
-        btn_y += 60
-
-
-# ----------------------------------------------------------------------------
-# BUILD IMPOSTAZIONI
-# ----------------------------------------------------------------------------
-def build_settings_menu():
-    global vol_label, sfx_btn
-    f = settings_frame
-
-    tk.Label(f, text="IMPOSTAZIONI", font=FONT_TITLE,
-             fg=TITLE_COLOR, bg=BG_COLOR).pack(pady=(40, 10))
-    create_separator(f)
-    tk.Label(f, text="", bg=BG_COLOR).pack()
-
-    row_vol = tk.Frame(f, bg=BG_COLOR)
-    row_vol.pack(pady=8)
-    tk.Label(row_vol, text="Volume Musica", font=FONT_LABEL,
-             fg=TEXT_COLOR, bg=BG_COLOR, width=16, anchor="e").grid(row=0, column=0, padx=8)
-
-    style = ttk.Style()
-    style.theme_use("clam")
-    style.configure("Gold.Horizontal.TScale",
-                    troughcolor="#3d2b10", background=BG_COLOR,
-                    sliderlength=18, sliderrelief="flat")
-
-    vol_var = tk.IntVar(value=volume)
-    slider = ttk.Scale(row_vol, from_=0, to=100, orient="horizontal", length=200,
-                       variable=vol_var, style="Gold.Horizontal.TScale",
-                       command=on_volume_change)
-    slider.grid(row=0, column=1, padx=8)
-
-    vol_label = tk.Label(row_vol, text=f"{volume}%", font=FONT_LABEL,
-                         fg=BTN_TEXT, bg=BG_COLOR, width=5)
-    vol_label.grid(row=0, column=2, padx=4)
-
-    row_sfx = tk.Frame(f, bg=BG_COLOR)
-    row_sfx.pack(pady=8)
-    tk.Label(row_sfx, text="Effetti Sonori", font=FONT_LABEL,
-             fg=TEXT_COLOR, bg=BG_COLOR, width=16, anchor="e").grid(row=0, column=0, padx=8)
-
-    sfx_btn = tk.Button(row_sfx,
-                        text="ON" if sfx_on else "OFF", font=FONT_BTN,
-                        fg=BTN_TEXT,
-                        bg="#2e6e2e" if sfx_on else "#6e2e2e",
-                        activebackground=BTN_COLOR_1, activeforeground=BG_COLOR,
-                        width=6, relief="flat", command=toggle_sfx, cursor="hand2")
-    sfx_btn.grid(row=0, column=1, padx=8)
-
-    create_separator(f)
-    tk.Frame(f, bg=BG_COLOR).pack(pady=10)
-    tk.Label(f, text="", bg=BG_COLOR).pack()
-    create_menu_btn(f, "TORNA AL MENU", go_to_main_menu)
-
-
-# ----------------------------------------------------------------------------
-# BUILD UI GENERALE
-# ----------------------------------------------------------------------------
-def build_ui():
-    global canvas, settings_frame
-    canvas = tk.Canvas(root, width=WIN_W, height=WIN_H,
-                       highlightthickness=0, bg=BG_COLOR)
-    canvas.pack(fill="both", expand=True)
-
-    if bg_img:
-        canvas.create_image(0, 0, anchor="nw", image=bg_img)
-
-    canvas.create_rectangle(0, 0, WIN_W, WIN_H,
-                             fill=BG_COLOR, stipple="gray75", outline="")
-
-    settings_frame = tk.Frame(canvas, bg=BG_COLOR, highlightthickness=0)
-
-    build_main_menu()
-    build_settings_menu()
-    show_main_menu()
-
-
-def setup_window():
-    root.geometry(f"{WIN_W}x{WIN_H}")
-    root.resizable(False, False)
-    root.configure(bg=BG_COLOR)
-    root.update_idletasks()
-    x = (root.winfo_screenwidth()  - WIN_W) // 2
-    y = (root.winfo_screenheight() - WIN_H) // 2
-    root.geometry(f"{WIN_W}x{WIN_H}+{x}+{y}")
-
-
-# ----------------------------------------------------------------------------
-# AVVIO
-# ----------------------------------------------------------------------------
 if __name__ == "__main__":
-    root = tk.Tk()
-    setup_window()
-    load_assets()
-    build_ui()
-    root.mainloop()
+    main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   
