@@ -33,7 +33,7 @@ def acquista_equipaggio(flotta):
     acquistati = 0
     ruoli_rimasti = len(conta)
 
-    # primo ciclo — acquisto obbligatorio di almeno 1 per ogni ruolo
+    # acquisto obbligatorio di almeno 1 personaggio per ogni ruolo
     for i in range(len(conta)):
         corretto = False
         while not corretto:
@@ -41,7 +41,7 @@ def acquista_equipaggio(flotta):
                 massimo = FLOTTA_MAX - acquistati - (ruoli_rimasti - 1)
                 n = int(input(f"Inserisci il numero di {conta[i]['nome']} (1-{massimo}): "))
                 if n <= 0 or n > massimo:
-                    print(f"Numero non valido. Inserisci un valore tra 1 e {massimo}.")
+                    print(f"Numero non valido. Inserisci un valore tra 1 e {massimo}!!")
                 else:
                     conta[i]["q"] += n
                     acquistati += n
@@ -50,10 +50,10 @@ def acquista_equipaggio(flotta):
             except ValueError:
                 print("Inserisci un numero valido.")
 
-    # secondo ciclo — acquisto opzionale di altri membri
+    #acquisto opzionale di altri membri
     continua = ""
     while continua != "n" and acquistati < FLOTTA_MAX:
-        continua = input("Vuoi aggiungere altri personaggi? (s/n): ")
+        continua = input("Vuoi aggiungere altri personaggi? (s/n): ").lower()
         if continua == "s":
             print("Quale personaggio vuoi aggiungere?")
             for i, membro in enumerate(conta):
@@ -83,7 +83,7 @@ def acquista_equipaggio(flotta):
                 except ValueError:
                     print("Inserisci un numero valido.")
 
-    # riepilogo finale
+ 
     print(f"\nFlotta ({acquistati}/{FLOTTA_MAX}):")
     for membro in conta:
         print(f"  {membro['nome'].capitalize()}: {membro['q']}")
@@ -103,10 +103,10 @@ def acquista_provviste(denari):
     print("benvenuto nello shop delle provviste!!")
     print(f"denari disponibili: {denari}")
 
-    acquisto = input("se vuoi acquistare provviste premi s altrimenti per continuare premi n: ")
+    acquisto = input("se vuoi acquistare provviste premi s altrimenti per continuare premi n: ").lower()
     while acquisto != "s" and acquisto != "n":
         print("scelta non valida!!")
-        acquisto = input("se vuoi acquistare provviste premi s altrimenti per continuare premi n: ")
+        acquisto = input("se vuoi acquistare provviste premi s altrimenti per continuare premi n: ").lower()
 
     corretto = False
     while not corretto and acquisto == "s":
@@ -120,19 +120,21 @@ def acquista_provviste(denari):
                 if costo > denari:
                     print("denari insufficienti!!")
                 else:
-                    denari -= costo  # ← aggiorna i denari
+                    denari -= costo 
                     print(f"denari rimasti: {denari}")
-                    continuo = input("vuoi acquistare altre provviste s/n: ")
+                    continuo = input("vuoi acquistare altre provviste s/n: ").lower()
+                    while continuo != "s" and continuo != "n":
+                        print("inserisci una scelta valida!!")
+                        continuo = input("vuoi acquistare altre provviste s/n: ").lower()
+
                     if continuo == "s":
                         corretto = False
                     elif continuo == "n":
                         corretto = True
-                    else:
-                        print("inserisci una scelta valida!!")
         except ValueError:
             print("inserisci un numero valido!!")
 
-    return denari  # ← restituisce i denari aggiornati
+    return denari 
 
 
 def acquista_merci(denari):
@@ -151,10 +153,10 @@ def acquista_merci(denari):
         print(f"{i+1} - {merce['tipo']} : {merce['prezzo']} moneta/e {merce['um']}")
     print(f"denari disponibili: {denari}")
 
-    acquisto = input("se vuoi acquistare merci premi s altrimenti per continuare premi n: ")
+    acquisto = input("se vuoi acquistare merci premi s altrimenti per continuare premi n: ").lower()
     while acquisto != "s" and acquisto != "n":
         print("scelta non valida!!")
-        acquisto = input("se vuoi acquistare merci premi s altrimenti per continuare premi n: ")
+        acquisto = input("se vuoi acquistare merci premi s altrimenti per continuare premi n: ").lower()
 
     corretto = False
     while not corretto and acquisto == "s":
@@ -168,19 +170,21 @@ def acquista_merci(denari):
                 if costo > denari:
                     print("denari insufficienti!!")
                 else:
-                    denari -= costo  # ← aggiorna i denari
+                    denari -= costo  
                     print(f"denari rimasti: {denari}")
-                    continuo = input("vuoi acquistare altre merci s/n: ")
+                    continuo = input("vuoi acquistare altre provviste s/n: ").lower()
+                    while continuo != "s" and continuo != "n":
+                        print("inserisci una scelta valida!!")
+                        continuo = input("vuoi acquistare altre provviste s/n: ").lower()
+
                     if continuo == "s":
                         corretto = False
                     elif continuo == "n":
                         corretto = True
-                    else:
-                        print("inserisci una scelta valida!!")
         except ValueError:
             print("inserisci un numero valido!!")
 
-    return denari  # ← restituisce i denari aggiornati
+    return denari  
 
 
 def shop():
