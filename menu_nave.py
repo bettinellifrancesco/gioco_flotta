@@ -382,33 +382,40 @@ def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattiv
         return rimossi
 
     def gestisci_evento(evt):
-        nonlocal albatro_avvistamenti, albatro_ucciso, settimane_totali
         nome = evt["nome"]
         conta_eventi[nome] = conta_eventi.get(nome, 0) + 1
         storia_eventi.append(nome)
         data_e_ora = str(datetime.now())
-        print(f"[{data_e_ora}] Settimana {settimana_corrente}: {nome}")
+        print(f"[" + data_e_ora + "] Settimana " + {settimana_corrente} + ": " + nome)
         risultato = {}
+
+        # mappa per gli eventi che causano perdite in mare
+        in_mare_map = {
+            "Verdura in mare": "verdura",
+            "Frutta in mare": "frutta",
+            "Carne in mare": "carne",
+            "Acqua in mare": "acqua",
+        }
 
         if nome == "Uomo in mare":
             ruolo, membro = rimuovi_membro_casuale()
             if ruolo == "":
                 print("Non c'era nessuno a bordo da perdere.")
             else:
-                print(f"Tragico: un {ruolo} è finito in mare e non ce l'ha fatta.")
+                print("Tragico: un " + ruolo + " è finito in mare e non ce l'ha fatta.")
                 risultato["morto"] = ruolo
             return risultato
 
-        if nome in ("Verdura in mare", "Frutta in mare", "Carne in mare", "Acqua in mare"):
+        if nome in in_mare_map:
             fraz = random.choice([0.5, 1/3, 0.25, 0.2])
-            tipo = nome.split()[0].lower()
+            tipo = in_mare_map[nome]
             quantita = provviste.get(tipo, 0)
             perdita = quantita * fraz
             nuovo_val = quantita - perdita
-            if nuovo_val < 0.0:
+            if nuovo_val < 0:
                 nuovo_val = 0.0
             provviste[tipo] = nuovo_val
-            print(f"Perdita di {frazione_a_testo(fraz)} della scorta ({tipo}): -{perdita:.2f} {tipo}.")
+            print(f"Perdita di " + frazione_a_testo(fraz) + " della scorta (" + tipo + "): -" + {round(perdita, 2)} + " " + tipo + ".")
             risultato["perdita_tipo"] = tipo
             risultato["perdita_frac"] = fraz
             risultato["perdita_qty"] = perdita
@@ -417,59 +424,54 @@ def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattiv
         if nome == "Pesca miracolosa":
             kg = random.randint(11, 20)
             provviste["carne"] = provviste.get("carne", 0) + kg
-            print(f"Pesca miracolosa: raccolti circa {kg} kg di pesce (aggiunti a 'carne').")
+            print(f"Pesca miracolosa: raccolti circa " + {kg} + " kg di pesce (aggiunti a 'carne').")
             risultato["pesca_kg"] = kg
             risultato["morale_variazione"] = 5
             return risultato
 
         if nome == "Tempesta miracolosa":
-            # Alcuni uomini raccolgono acqua nei barili vuoti: aumento acqua
             aggiunta = random.randint(11, 20)
             provviste["acqua"] = provviste.get("acqua", 0) + aggiunta
-            print(f"Tempesta miracolosa: alcuni membri hanno raccolto acqua! +{aggiunta} barili.")
+            print(f"Tempesta miracolosa: alcuni membri hanno raccolto acqua! +" +{aggiunta} + " barili.")
             risultato["acqua_aggiunta"] = aggiunta
             return risultato
 
         if nome == "Venti favorevoli":
             morale_gain = random.randint(5, 15)
             if settimane_totali - settimana_corrente >= 1:
-                print(f"Venti favorevoli: il viaggio procede più velocemente (-1 settimana). Morale +{morale_gain}.")
+                print(f"Venti favorevoli: il viaggio procede più velocemente (-1 settimana). Morale +" +{morale_gain} + ".")
                 risultato["accorcia_settimane"] = 1
                 risultato["morale_variazione"] = morale_gain
             else:
-                print(f"Venti favorevoli, ma il beneficio è minimo. Morale +{morale_gain}.")
+                print(f"Venti favorevoli, ma il beneficio è minimo. Morale +" +{morale_gain} + ".")
                 risultato["morale_variazione"] = morale_gain
             return risultato
 
         if nome == "Cattivo tempo":
-            # Parte delle bottiglie di medicinale si rovescia
             fraz = random.choice([0.5, 1/3, 0.25, 0.2])
             perdita = merci.get("medicinali", 0) * fraz
             nuovo_med = merci.get("medicinali", 0) - perdita
             if nuovo_med < 0:
                 nuovo_med = 0
             merci["medicinali"] = nuovo_med
-            print(f"Cattivo tempo: parte delle bottiglie di medicinale si rovescia (-{frazione_a_testo(fraz)}). Perduta: {perdita:.2f}.")
+            print(f"Cattivo tempo: parte delle bottiglie di medicinale si rovescia (-" + frazione_a_testo(fraz) + "). Perduta: " + {round(perdita, 2)} + ".")
             risultato["perdita_medicinali"] = perdita
             risultato["morale_variazione"] = -3
             return risultato
-
         if nome == "Ondata":
-            # Un'onda altissima abbatte una parte delle armi in mare
             fraz = random.choice([0.5, 1/3, 0.25, 0.2])
             perdita = merci.get("armi", 0) * fraz
             nuovo_armi = merci.get("armi", 0) - perdita
             if nuovo_armi < 0:
                 nuovo_armi = 0
             merci["armi"] = nuovo_armi
-            print(f"Ondata: parte delle armi è finita in mare (-{frazione_a_testo(fraz)}). Perduta: {perdita:.2f}.")
+            print(f"Ondata: parte delle armi è finita in mare (-" + frazione_a_testo(fraz) + "). Perduta: " + {round(perdita, 2)} + ".")
             risultato["onde_perdita_frac"] = fraz
             risultato["onde_perdita_tipo"] = "armi"
             risultato["morale_variazione"] = -3
             return risultato
 
         if nome == "Infestazione ratti":
-            # I ratti rovinano principalmente la stoffa
             fraz = random.choice([0.5, 1/3, 0.25, 0.2])
             perdita = merci.get("stoffa", 0) * fraz
             if perdita > 0:
@@ -483,21 +485,22 @@ def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattiv
             return risultato
 
         if nome == "Avvistamento albatro":
-            albatro_avvistamenti += 1
+            # non modifichiamo direttamente albatro_avvistamenti: restituiamo l'incremento
+            risultato["albatro_inc"] = 1
             print("Albatro avvistato: buon auspicio per l'equipaggio.")
             risultato["albatro_avvistato"] = True
-            if int(merci.get("armi", 0)) >= 1 and conta_membri_vivi() > 0:
+            num_armi = merci.get("armi", 0)
+            membri_vivi = conta_membri_vivi()
+            if num_armi >= 1 and membri_vivi > 0:
                 print("Hai armi a bordo. Puoi provare a sparare all'albatro per ottenere carne.")
                 print("Attenzione: le armi usate non potranno essere barattate e saranno rimosse dalle merci.")
                 scelta = input("Vuoi provare a sparare all'albatro? (s/n): ").strip().lower()
                 if scelta == 's':
-                    num_armi = int(merci.get("armi", 0))
-                    membri_vivi = conta_membri_vivi()
                     if num_armi < membri_vivi:
-                        tentativi = num_armi
+                        tentativi = int(num_armi)
                     else:
-                        tentativi = membri_vivi
-                    print(f"Hai a disposizione {tentativi} colpi (min(numero armi, membri vivi)).")
+                        tentativi = int(membri_vivi)
+                    print(f"Hai a disposizione " + {tentativi} + " colpi (min(numero armi, membri vivi)).")
                     colpi = tentativi
                     successi = 0
                     for _ in range(colpi):
@@ -511,8 +514,7 @@ def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattiv
                     if successi > 0:
                         aggiunta_carne = random.randint(10, 15)
                         provviste["carne"] = provviste.get("carne", 0) + aggiunta_carne
-                        print(f"Albatro abbattuto! +{aggiunta_carne} kg di carne.")
-                        albatro_ucciso = True
+                        print(f"Albatro abbattuto! +" + {aggiunta_carne} + " kg di carne.")
                         risultato["albatro_ucciso"] = True
                     else:
                         print("Hai sparato ma l'albatro non è stato abbattuto.")
@@ -532,8 +534,7 @@ def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattiv
                     ruolo = random.choice(ruoli_possibili)
                     morale_nuovo = random.randint(25, 75)
                     aggiungi_membro(ruolo, morale_nuovo, False)
-                # cassa: aggiunge merci (non provviste) 10-20 unità
-                for k in list(merci.keys()):
+                for k in merci:
                     if k in ("medicinali", "armi", "sale", "stoffa", "coltelli", "diamanti"):
                         aggiunta = random.randint(10, 20)
                         merci[k] = merci.get(k, 0) + aggiunta
@@ -544,19 +545,21 @@ def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattiv
             return risultato
 
         if nome == "Epidemia":
-            # Ogni non-medico ha il 70% di contrarre l'epidemia
             lista_malati = []
-            for ruolo, membri in list(flotta.items()):
+            for ruolo in flotta:
                 if ruolo != "medico":
-                    for idx in range(len(membri)):
+                    membri = flotta[ruolo]
+                    for _ in range(len(membri)):
                         if random.random() < 0.7:
                             lista_malati.append(ruolo)
             if not lista_malati:
                 print("Epidemia: nessuno si è ammalato in modo fatale.")
                 risultato["ammalati"] = 0
                 return risultato
-            medici = len(flotta.get("medico", []))
-            medicinali_disponibili = int(merci.get("medicinali", 0))
+            medici = 0
+            if flotta.get("medico"):
+                medici = len(flotta["medico"])
+            medicinali_disponibili = merci.get("medicinali", 0)
             ammalati = len(lista_malati)
             curati = 0
             morti = []
@@ -564,7 +567,7 @@ def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattiv
                 if ammalati < medicinali_disponibili:
                     curabili = ammalati
                 else:
-                    curabili = medicinali_disponibili
+                    curabili = int(medicinali_disponibili)
                 nuovo_med = merci.get("medicinali", 0) - curabili
                 if nuovo_med < 0:
                     nuovo_med = 0
@@ -574,9 +577,8 @@ def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattiv
                 if da_odiare > 0:
                     morti = rimuovi_n_membri_non_medici(da_odiare)
             else:
-                # tutti gli ammalati muoiono
                 morti = rimuovi_n_membri_non_medici(ammalati)
-            print(f"Epidemia: ammalati {ammalati}, curati {curati}, morti {len(morti)}. Medicinali rimanenti: {int(merci.get('medicinali',0))}")
+            print(f"Epidemia: ammalati " + {ammalati} + ", curati " + {curati} + ", morti " + {len(morti)} + ". Medicinali rimanenti: " + {medicinali_disponibili})
             risultato["ammalati"] = ammalati
             risultato["curati"] = curati
             risultato["morti"] = morti
@@ -585,18 +587,17 @@ def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattiv
         if nome == "Attacco pirata":
             numero_pirati = random.randint(3, 10)
             membri_vivi = conta_membri_vivi()
-            num_armi = int(merci.get("armi", 0))
+            num_armi = merci.get("armi", 0)
             if num_armi < membri_vivi:
-                numero_difensori = num_armi
+                numero_difensori = int(num_armi)
             else:
                 numero_difensori = membri_vivi
-            # Le armi usate vengono consumate
             nuovo_armi = merci.get("armi", 0) - numero_difensori
             if nuovo_armi < 0:
                 nuovo_armi = 0
             merci["armi"] = nuovo_armi
-            uomini_persi_calc = numero_pirati - numero_difensori
             perdite = []
+            uomini_persi_calc = numero_pirati - numero_difensori
             if uomini_persi_calc > 0:
                 if uomini_persi_calc < membri_vivi:
                     uomini_persi = uomini_persi_calc
@@ -606,11 +607,11 @@ def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattiv
                     ruolo, membro = rimuovi_membro_casuale()
                     if ruolo:
                         perdite.append(ruolo)
-                print(f"Attacco pirata! Persi {len(perdite)} membri.")
+                print(f"Attacco pirata! Persi " + {len(perdite)} + " membri.")
             else:
                 print("Attacco pirata respinto senza vittime!")
             perdite_merci = []
-            for k in list(merci.keys()):
+            for k in merci:
                 perdita = merci[k] * random.choice([0.0, 0.1, 0.25])
                 if perdita > 0:
                     nuovo_k = merci[k] - perdita
@@ -625,24 +626,24 @@ def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattiv
 
         if nome == "Danni al timone":
             print("Danni al timone: servono riparazioni.")
-            if len(flotta.get("meccanico", [])) > 0:
+            if flotta.get("meccanico"):
                 print("C'è un meccanico a bordo: riparazione più veloce (+1 settimana).")
                 risultato["aggiungi_settimane"] = 1
             else:
                 aggiungi = random.randint(2, 4)
-                print(f"Nessun meccanico: riparazione lunga (+{aggiungi} settimane).")
+                print(f"Nessun meccanico: riparazione lunga (+" + {aggiungi} + " settimane).")
                 risultato["aggiungi_settimane"] = aggiungi
             risultato["morale_variazione"] = -3
             return risultato
 
         if nome == "Raffiche di vento":
             print("Raffiche di vento: rotta allungata e difficoltà.")
-            if len(flotta.get("navigatore", [])) > 0:
+            if flotta.get("navigatore"):
                 print("C'è un navigatore: impatto ridotto (+1 settimana).")
                 risultato["aggiungi_settimane"] = 1
             else:
                 aggiungi = random.randint(2, 4)
-                print(f"Nessun navigatore: devi allungare la rotta (+{aggiungi} settimane).")
+                print(f"Nessun navigatore: devi allungare la rotta (+" + {aggiungi} + " settimane).")
                 risultato["aggiungi_settimane"] = aggiungi
             risultato["morale_variazione"] = -3
             return risultato
@@ -653,31 +654,25 @@ def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattiv
             if scelta != 's':
                 print("Decidi di non approdare.")
                 return risultato
-            # isola: 50% abitata
             if random.random() < 0.5:
                 print("L'isola non è abitata. Nulla di fatto, ma tempo perso.")
-                settimane_totali += random.randint(1, 2)
                 risultato["aggiungi_settimane"] = 1
                 return risultato
-            # abitata
             if random.random() < 0.5:
                 print("Gli abitanti sono ostili e mettono in fuga l'equipaggio.")
-                settimane_totali += random.randint(1, 2)
                 risultato["aggiungi_settimane"] = 1
                 return risultato
-            # abitata e amichevole
             print("Isola amichevole: gli isolani donano merci.")
             bonus_min = 5
             bonus_max = 20
-            # se c'è stato almeno un avvistamento di albatro e nessuno è stato ucciso, premio maggiore
             if albatro_avvistamenti > 0 and not albatro_ucciso:
                 bonus_min = 20
                 bonus_max = 40
-            for k in list(merci.keys()):
+            for k in merci:
                 if k in ("medicinali", "armi", "sale", "stoffa", "coltelli", "diamanti"):
                     aggiunta = random.randint(bonus_min, bonus_max)
                     merci[k] = merci.get(k, 0) + aggiunta
-            settimane_totali += random.randint(1, 2)
+            risultato["aggiungi_settimane"] = random.randint(1, 2)
             risultato["isola_donazioni"] = True
             risultato["morale_variazione"] = 5
             return risultato
@@ -697,7 +692,7 @@ def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattiv
         meta = passi // 2
         for posizione in range(passi):
             onde = "~" * posizione
-            print(f"{onde}⛵")
+            print(onde + "⛵")
             if posizione == meta:
                 risposta_valida = False
                 while not risposta_valida:
@@ -715,9 +710,14 @@ def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattiv
 
     risultati = []
     while settimana_corrente <= settimane_totali:
-        print(f"--- SETTIMANA {settimana_corrente} di {settimane_totali} ---")
+        print(f"--- SETTIMANA " + {settimana_corrente} + " di " + {settimane_totali} + " ---")
         evento_scelto = scegli_evento()
         risultato = gestisci_evento(evento_scelto)
+        # applica aggiornamenti di stato restituiti dall'evento
+        if risultato.get("albatro_inc"):
+            albatro_avvistamenti = albatro_avvistamenti + risultato.get("albatro_inc", 0)
+        if "albatro_ucciso" in risultato:
+            albatro_ucciso = bool(risultato.get("albatro_ucciso"))
         risultati.append({"settimana": settimana_corrente, "evento": evento_scelto["nome"], "risultato": risultato})
 
         # Se tutta la flotta è stata annientata, termina la partita
@@ -791,17 +791,21 @@ def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattiv
         settimana_corrente += 1
 
     print("RIEPILOGO DEL VIAGGIO")
-    for nome, cnt in conta_eventi.items():
-        print(f"- {nome}: {cnt} volta/e")
+    if conta_eventi:
+        print("- Eventi registrati:")
+        for nome in conta_eventi:
+            print(f" - " + {nome} + ": " + {conta_eventi[nome]} + " volta/e")
+    else:
+        print("Nessun evento registrato.")
     print("Stato finale flotta:")
-    for k, v in flotta.items():
-        print(f"  {k}: {v}")
+    for ruolo in flotta:
+        print(f"  " +{ruolo} + ": " + {len(flotta[ruolo])} + " membri")
     print("Stato finale provviste:")
-    for k, v in provviste.items():
-        print(f"  {k}: {v:.2f}")
+    for k in provviste:
+        print(f"  " + {k} + ": " + {round(provviste[k], 2)})
     print("Stato finale merci:")
-    for k, v in merci.items():
-        print(f"  {k}: {v:.2f}")
+    for k in merci:
+        print(f"  " + {k} + ": " + {round(merci[k], 2)})
     print("Simulazione completata.")
     return {"settimane": settimane_totali, "risultati": risultati, "conteggi": conta_eventi, "storia": storia_eventi}
 
@@ -832,8 +836,7 @@ def main():
             print("Errore d'inserimento")
 
 
-if __name__ == "__main__":
-    main()
+main()
 
 
 
