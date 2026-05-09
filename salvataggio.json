@@ -1,0 +1,55 @@
+{
+  "flotta": {
+    "cuoco": [
+      {
+        "morale": 98,
+        "pagato": true
+      }
+    ],
+    "marinaio": [],
+    "meccanico": [
+      {
+        "morale": 98,
+        "pagato": true
+      }
+    ],
+    "medico": [
+      {
+        "morale": 98,
+        "pagato": true
+      }
+    ],
+    "navigatore": [
+      {
+        "morale": 98,
+        "pagato": true
+      }
+    ]
+  },
+  "provviste": {
+    "verdura": 0.0,
+    "frutta": 0.0,
+    "carne": 3.0,
+    "acqua": 0.0
+  },
+  "merci": {
+    "medicinali": 0.0,
+    "armi": 0.0,
+    "sale": 2.0,
+    "stoffa": 0.8,
+    "coltelli": 0.0,
+    "diamanti": 0.0
+  },
+  "settimane_totali": 8,
+  "settimana_corrente": 2,
+  "conta_eventi": {
+    "Uomo in mare": 1,
+    "Infestazione ratti": 1
+  },
+  "storia_eventi": [
+    "Uomo in mare",
+    "Infestazione ratti"
+  ],
+  "albatro_avvistamenti": 0,
+  "albatro_ucciso": false
+}
