@@ -1,855 +1,651 @@
 import random
-import time
-import json
-from datetime import datetime
+CATEGORIE_PROVVISTE=[{}]
+CATEGORIE_MERCI=[{}]
+CATEGORIE_RUOLI=[{}]
+SETTIMANE_BASE = 8
+def indice_provvista(nome):
+    for i in range(len(CATEGORIE_PROVVISTE)):
+        if CATEGORIE_PROVVISTE[i]["nome"] == nome:
+            return i
+    return -1
 
 
-FLOTTA_MAX = 16
+def indice_merce(nome):
+    for i in range(len(CATEGORIE_MERCI)):
+        if CATEGORIE_MERCI[i]["nome"] == nome:
+            return i
+    return -1
+def conta_membri_vivi(lista_membri):
+    return len(lista_membri)
+def conta_membri_per_ruolo(lista_membri, nome_ruolo):
+    contatore = 0
+    for membro in lista_membri:
+        if membro["ruolo"] == nome_ruolo:
+            contatore = contatore + 1
+    return contatore
+def rimuovi_membro_casuale(lista_membri):
+    if len(lista_membri) == 0:
+        return None
+    indice = random.randrange(len(lista_membri))
+    membro_rimosso = lista_membri[indice]
+    lista_membri.pop(indice)
+    return membro_rimosso
+def rimuovi_n_membri_non_medici(lista_membri, numero_da_rimuovere):
+    # Costruiamo lista degli indici dei non-medici
+    indici_non_medici = []
+    for i in range(len(lista_membri)):
+        if lista_membri[i]["ruolo"] != "medico":
+            indici_non_medici.append(i)
+    rimossi = 0
+    # Rimuoviamo dal fondo per non spostare gli indici
+    random.shuffle(indici_non_medici)
+    da_rimuovere = min(numero_da_rimuovere, len(indici_non_medici))
+    # Ordiniamo in ordine decrescente per rimuovere dal fondo
+    indici_non_medici_ordinati = sorted(indici_non_medici[:da_rimuovere], reverse=True)
+    for i in indici_non_medici_ordinati:
+        lista_membri.pop(i)
+        rimossi = rimossi + 1
+    return rimossi
+def aggiungi_membro(lista_membri, nome_ruolo, morale_iniziale, e_pagato):
+    nuovo_membro = {"ruolo": nome_ruolo, "morale": morale_iniziale, "pagato": e_pagato}
+    lista_membri.append(nuovo_membro)
+def frazione_a_testo(frazione):
+    if abs(frazione - 0.5) < 0.001:
+        return "1/2"
+    if abs(frazione - 1.0 / 3.0) < 0.001:
+        return "1/3"
+    if abs(frazione - 0.25) < 0.001:
+        return "1/4"
+    if abs(frazione - 0.2) < 0.001:
+        return "1/5"
+    return str(frazione)
 
-MIN_PROV = 0.0
+LISTA_EVENTI = [
+    {"nome": "Uomo in mare",          "ripetibile": False, "limite": 1,  "peso": 1},
+    {"nome": "Verdura in mare",       "ripetibile": False, "limite": 1,  "peso": 2},
+    {"nome": "Frutta in mare",        "ripetibile": False, "limite": 1,  "peso": 2},
+    {"nome": "Carne in mare",         "ripetibile": False, "limite": 1,  "peso": 2},
+    {"nome": "Acqua in mare",         "ripetibile": False, "limite": 1,  "peso": 2},
+    {"nome": "Pesca miracolosa",      "ripetibile": False, "limite": 1,  "peso": 1},
+    {"nome": "Tempesta miracolosa",   "ripetibile": False, "limite": 1,  "peso": 1},
+    {"nome": "Venti favorevoli",      "ripetibile": False, "limite": 1,  "peso": 3},
+    {"nome": "Cattivo tempo",         "ripetibile": False, "limite": 1,  "peso": 2},
+    {"nome": "Ondata",                "ripetibile": False, "limite": 1,  "peso": 1},
+    {"nome": "Infestazione ratti",    "ripetibile": False, "limite": 1,  "peso": 2},
+    {"nome": "Avvistamento albatro",  "ripetibile": True,  "limite": 3,  "peso": 2},
+    {"nome": "Avvistamento scialuppa","ripetibile": False, "limite": 1,  "peso": 1},
+    {"nome": "Epidemia",              "ripetibile": False, "limite": 1,  "peso": 1},
+    {"nome": "Attacco pirata",        "ripetibile": False, "limite": 1,  "peso": 1},
+    {"nome": "Danni al timone",       "ripetibile": False, "limite": 1,  "peso": 2},
+    {"nome": "Raffiche di vento",     "ripetibile": False, "limite": 1,  "peso": 2},
+    {"nome": "Avvistamento isola",    "ripetibile": False, "limite": 1,  "peso": 1},
+    {"nome": "Nessun imprevisto",     "ripetibile": True,  "limite": 99, "peso": 3},
+]
 
 
-CONSUMO_VERDURA = 0.5
-CONSUMO_FRUTTA = 1.0
-CONSUMO_CARNE = 1.0
-CONSUMO_ACQUA = 0.5
+def scegli_evento(contatore_eventi):
+    nomi_disponibili = []
+    pesi_disponibili = []
+    for evento in LISTA_EVENTI:
+        nome_evento = evento["nome"]
+        volte_accaduto = contatore_eventi.get(nome_evento, 0)
+        if volte_accaduto < evento["limite"]:
+            nomi_disponibili.append(nome_evento)
+            pesi_disponibili.append(evento["peso"])
+    if len(nomi_disponibili) == 0:
+        return "Nessun imprevisto"
+    nome_scelto = random.choices(nomi_disponibili, weights=pesi_disponibili, k=1)[0]
+    return nome_scelto
 
 
-def mostra_menu_principale():
-    print("-----------NUOVO MONDO-----------")
-    print("1 - nuova partita")
-    print("2 - carica vecchia partita")
-    print("---------------------------------")
+def gestisci_evento(
+    nome_evento,
+    lista_membri,
+    quantita_provviste,
+    quantita_merci,
+    settimane_totali,
+    albatri_avvistati,
+    albatro_ucciso
+):
+    """
+    Gestisce l'evento e restituisce un dizionario con le variazioni da applicare:
+    - variazione_settimane: intero (positivo = allungamento, negativo = accorciamento)
+    - variazione_morale_evento: intero da aggiungere al morale di tutti i membri
+    - albatri_avvistati_aggiunta: 1 se avvistato un albatro, altrimenti 0
+    - albatro_ora_ucciso: True se un albatro e' stato ucciso in questo evento
+    """
+    print()
+    print(f"  EVENTO: {nome_evento}")
 
+    risultato = {
+        "variazione_settimane": 0,
+        "variazione_morale_evento": 0,
+        "albatri_avvistati_aggiunta": 0,
+        "albatro_ora_ucciso": False,
+    }
 
-def acquista_equipaggio():
-    
-    print("------FASE 1: EQUIPAGGIO------")
-    print("è il momento di ingaggiare la tua flotta!!")
-    ruoli = [
-        {"nome": "cuoco", "prezzo": 15},
-        {"nome": "marinaio", "prezzo": 10},
-        {"nome": "meccanico", "prezzo": 15},
-        {"nome": "medico", "prezzo": 25},
-        {"nome": "navigatore", "prezzo": 20},
-    ]
-    
-    flotta = {r["nome"]: [] for r in ruoli}
-    acquistati = 0
-    ruoli_rimasti = len(ruoli)
+    frazioni_possibili = [0.5, 1.0 / 3.0, 0.25, 0.2]
 
-    denari = 2000
-    print(f"Denari disponibili per l'ingaggio: {denari}")
+    if nome_evento == "Uomo in mare":
+        membro_perso = rimuovi_membro_casuale(lista_membri)
+        if membro_perso is None:
+            print("  Non c'era nessuno a bordo.")
+        else:
+            print(f"  Tragico: un {membro_perso['ruolo']} e' caduto in mare.")
 
-    # Prima fase: almeno 1 per ruolo
-    for i in range(len(ruoli)):
-        valido = False
-        while not valido:
-            try:
-                massimo = FLOTTA_MAX - acquistati - (ruoli_rimasti - 1)
-                n = int(input(f"Inserisci il numero di {ruoli[i]['nome']} (1-{massimo}): "))
-                if n < 1 or n > massimo:
-                    print(f"Numero non valido. Inserisci un valore tra 1 e {massimo}.")
+    elif nome_evento == "Verdura in mare":
+        indice = indice_provvista("verdura")
+        frazione = random.choice(frazioni_possibili)
+        perdita = quantita_provviste[indice] * frazione
+        quantita_provviste[indice] = quantita_provviste[indice] - perdita
+        if quantita_provviste[indice] < 0:
+            quantita_provviste[indice] = 0.0
+        print(f"  Tempesta: persa {frazione_a_testo(frazione)} della verdura ({round(perdita, 2)} kg).")
+
+    elif nome_evento == "Frutta in mare":
+        indice = indice_provvista("frutta")
+        frazione = random.choice(frazioni_possibili)
+        perdita = quantita_provviste[indice] * frazione
+        quantita_provviste[indice] = quantita_provviste[indice] - perdita
+        if quantita_provviste[indice] < 0:
+            quantita_provviste[indice] = 0.0
+        print(f"  Tempesta: persa {frazione_a_testo(frazione)} della frutta ({round(perdita, 2)} kg).")
+
+    elif nome_evento == "Carne in mare":
+        indice = indice_provvista("carne")
+        frazione = random.choice(frazioni_possibili)
+        perdita = quantita_provviste[indice] * frazione
+        quantita_provviste[indice] = quantita_provviste[indice] - perdita
+        if quantita_provviste[indice] < 0:
+            quantita_provviste[indice] = 0.0
+        print(f"  Tempesta: persa {frazione_a_testo(frazione)} della carne ({round(perdita, 2)} kg).")
+
+    elif nome_evento == "Acqua in mare":
+        indice = indice_provvista("acqua")
+        frazione = random.choice(frazioni_possibili)
+        perdita = quantita_provviste[indice] * frazione
+        quantita_provviste[indice] = quantita_provviste[indice] - perdita
+        if quantita_provviste[indice] < 0:
+            quantita_provviste[indice] = 0.0
+        print(f"  Tempesta: persa {frazione_a_testo(frazione)} dell'acqua ({round(perdita, 2)} barili).")
+
+    elif nome_evento == "Pesca miracolosa":
+        kg_pescati = random.randint(11, 20)
+        indice = indice_provvista("carne")
+        quantita_provviste[indice] = quantita_provviste[indice] + kg_pescati
+        print(f"  Pesca miracolosa: +{kg_pescati} kg di carne (pesce).")
+        risultato["variazione_morale_evento"] = 5
+
+    elif nome_evento == "Tempesta miracolosa":
+        barili_raccolti = random.randint(11, 20)
+        indice = indice_provvista("acqua")
+        quantita_provviste[indice] = quantita_provviste[indice] + barili_raccolti
+        print(f"  Tempesta miracolosa: +{barili_raccolti} barili d'acqua raccolti.")
+
+    elif nome_evento == "Venti favorevoli":
+        guadagno_morale = random.randint(5, 15)
+        risultato["variazione_settimane"] = -1
+        risultato["variazione_morale_evento"] = guadagno_morale
+        print(f"  Venti favorevoli: viaggio accorciato di 1 settimana. Morale +{guadagno_morale}.")
+
+    elif nome_evento == "Cattivo tempo":
+        indice = indice_merce("medicinali")
+        frazione = random.choice(frazioni_possibili)
+        perdita = quantita_merci[indice] * frazione
+        quantita_merci[indice] = quantita_merci[indice] - perdita
+        if quantita_merci[indice] < 0:
+            quantita_merci[indice] = 0.0
+        print(f"  Cattivo tempo: persi {frazione_a_testo(frazione)} dei medicinali ({round(perdita, 2)} bottiglie).")
+        risultato["variazione_morale_evento"] = -3
+
+    elif nome_evento == "Ondata":
+        indice = indice_merce("armi")
+        frazione = random.choice(frazioni_possibili)
+        perdita = quantita_merci[indice] * frazione
+        quantita_merci[indice] = quantita_merci[indice] - perdita
+        if quantita_merci[indice] < 0:
+            quantita_merci[indice] = 0.0
+        print(f"  Ondata: perse {frazione_a_testo(frazione)} delle armi ({round(perdita, 2)} pezzi).")
+        risultato["variazione_morale_evento"] = -3
+
+    elif nome_evento == "Infestazione ratti":
+        indice = indice_merce("stoffa")
+        frazione = random.choice(frazioni_possibili)
+        perdita = quantita_merci[indice] * frazione
+        quantita_merci[indice] = quantita_merci[indice] - perdita
+        if quantita_merci[indice] < 0:
+            quantita_merci[indice] = 0.0
+        print(f"  Infestazione ratti: rovinate {frazione_a_testo(frazione)} delle stoffe ({round(perdita, 2)} teli).")
+        risultato["variazione_morale_evento"] = -2
+
+    elif nome_evento == "Avvistamento albatro":
+        risultato["albatri_avvistati_aggiunta"] = 1
+        print("  Un albatro e' stato avvistato: buon presagio!")
+        indice_armi = indice_merce("armi")
+        numero_armi = int(quantita_merci[indice_armi])
+        numero_vivi = conta_membri_vivi(lista_membri)
+        if numero_armi >= 1 and numero_vivi > 0:
+            print("  Hai armi a bordo. Puoi provare a sparare all'albatro per ottenere carne.")
+            print("  Attenzione: le armi usate NON potranno essere barattate.")
+            risposta = input("  Vuoi sparare all'albatro? (s/n): ").strip().lower()
+            while risposta != "s" and risposta != "n":
+                risposta = input("  Rispondi s oppure n: ").strip().lower()
+            if risposta == "s":
+                numero_colpi = min(numero_armi, numero_vivi)
+                print(f"  Hai {numero_colpi} colpi a disposizione.")
+                quantita_merci[indice_armi] = quantita_merci[indice_armi] - numero_colpi
+                successi = 0
+                for _ in range(numero_colpi):
+                    if random.random() < 0.5:
+                        successi = successi + 1
+                if successi > 0:
+                    carne_guadagnata = random.randint(10, 15)
+                    indice_carne = indice_provvista("carne")
+                    quantita_provviste[indice_carne] = quantita_provviste[indice_carne] + carne_guadagnata
+                    print(f"  Albatro abbattuto! +{carne_guadagnata} kg di carne.")
+                    risultato["albatro_ora_ucciso"] = True
                 else:
-                    costo = ruoli[i]["prezzo"] * n * 8
-                    if costo > denari:
-                        print(f"Denari insufficienti per {n} {ruoli[i]['nome']} (costo {costo}). Denari rimasti: {denari}")
-                    else:
-                        denari -= costo
-                        for _ in range(n):
-                            flotta[ruoli[i]["nome"]].append({"morale": 100, "pagato": True})
-                        acquistati += n
-                        ruoli_rimasti -= 1
-                        print(f"Assunti {n} {ruoli[i]['nome']}. Denari rimasti: {denari}")
-                        valido = True
-            except ValueError:
-                print("Inserisci un numero valido.")
-
-    # Fase opzionale: aggiungi altri membri fino al massimo
-    aggiungi_altro = True
-    while aggiungi_altro and acquistati < FLOTTA_MAX:
-        scelta_cont = input("Vuoi aggiungere altri personaggi? (s/n): ").strip().lower()
-        if scelta_cont == 'n':
-            aggiungi_altro = False
-        elif scelta_cont != 's':
-            print("Scelta non valida.")
+                    print("  Hai sparato ma l'albatro non e' stato colpito.")
+            else:
+                print("  Hai deciso di non sparare.")
         else:
-            for idx, r in enumerate(ruoli, start=1):
-                print(f"{idx} - {r['nome']}")
-            scelta_valida = False
-            while not scelta_valida:
-                try:
-                    scelta = int(input("Scegli il numero del personaggio: "))
-                    if scelta < 1 or scelta > len(ruoli):
-                        print("Scelta non valida.")
-                    else:
-                        scelta_valida = True
-                except ValueError:
-                    print("Inserisci un numero valido.")
-            massimo = FLOTTA_MAX - acquistati
-            n_valido = False
-            while not n_valido:
-                try:
-                    n = int(input(f"Quanti {ruoli[scelta-1]['nome']} vuoi aggiungere? (1-{massimo}): "))
-                    if n < 1 or n > massimo:
-                        print(f"Numero non valido. Inserisci un valore tra 1 e {massimo}.")
-                    else:
-                        costo = ruoli[scelta-1]["prezzo"] * n * 8
-                        if costo > denari:
-                            print(f"Denari insufficienti per {n} {ruoli[scelta-1]['nome']} (costo {costo}). Denari rimasti: {denari}")
-                        else:
-                            denari -= costo
-                            for _ in range(n):
-                                flotta[ruoli[scelta-1]['nome']].append({"morale": 100, "pagato": True})
-                            acquistati += n
-                            print(f"Assunti {n} {ruoli[scelta-1]['nome']}. Denari rimasti: {denari}")
-                            n_valido = True
-                except ValueError:
-                    print("Inserisci un numero valido.")
+            print("  Non hai abbastanza armi o uomini per tentare il tiro.")
 
-    print("\nFlotta finale:")
-    tot = 0
-    for v in flotta.values():
-        tot += len(v)
-    for k, v in flotta.items():
-        print(f"  {k}: {len(v)}")
-    print(f"Totale membri: {tot}/{FLOTTA_MAX}")
-    return flotta, denari
-
-
-def acquista_provviste(denari):
-    print("------FASE 2: PROVVISTE------")
-    provviste_list = [
-        {"nome": "verdura", "um": "kg", "prezzo": 0.5},
-        {"nome": "frutta", "um": "kg", "prezzo": 1},
-        {"nome": "carne", "um": "kg", "prezzo": 2},
-        {"nome": "acqua", "um": "barili", "prezzo": 0.5},
-    ]
-    provviste = {p["nome"]: 0.0 for p in provviste_list}
-    print(f"Denari disponibili: {denari}")
-    acquistando = True
-    while acquistando:
-        scelta = input("Vuoi acquistare provviste? (s/n): ").strip().lower()
-        if scelta == 'n':
-            acquistando = False
-        elif scelta != 's':
-            print("Scelta non valida.")
+    elif nome_evento == "Avvistamento scialuppa":
+        print("  Scialuppa alla deriva con 4 uomini e una cassa misteriosa.")
+        risposta = input("  Vuoi salvare i 4 naufraghi? (s/n): ").strip().lower()
+        while risposta != "s" and risposta != "n":
+            risposta = input("  Rispondi s oppure n: ").strip().lower()
+        if risposta == "s":
+            for _ in range(4):
+                ruolo_casuale = CATEGORIE_RUOLI[random.randint(0, len(CATEGORIE_RUOLI) - 1)]["nome"]
+                morale_casuale = random.randint(25, 75)
+                aggiungi_membro(lista_membri, ruolo_casuale, morale_casuale, False)
+            print("  Salvati 4 naufraghi (non pagati a fine viaggio).")
+            # Contenuto della cassa: tutte le merci aumentano tra 10 e 20
+            for i in range(len(CATEGORIE_MERCI)):
+                quantita_merci[i] = quantita_merci[i] + random.randint(10, 20)
+            print("  La cassa era piena di merci! Tutte le merci sono aumentate.")
         else:
-            for i, p in enumerate(provviste_list, start=1):
-                print(f"{i} - {p['nome']} : {p['prezzo']} per {p['um']}")
-            valido_merce = False
-            while not valido_merce:
-                try:
-                    num = int(input("Inserisci il numero della provvista: "))
-                    qty = float(input("Quanti (minimo 1): "))
-                    if num < 1 or num > len(provviste_list) or qty < 1:
-                        print("Hai inserito un numero o una quantità non valida.")
-                    else:
-                        costo = provviste_list[num-1]["prezzo"] * qty
-                        if costo > denari:
-                            print("Denari insufficienti.")
-                        else:
-                            denari -= costo
-                            provviste[provviste_list[num-1]["nome"]] += qty
-                            print(f"Acquistati {qty} {provviste_list[num-1]['um']} di {provviste_list[num-1]['nome']}. Denari rimasti: {denari}")
-                            continua_acquisto = input("Vuoi acquistare altre provviste s/n: ").strip().lower()
-                            while continua_acquisto != 's' and continua_acquisto != 'n':
-                                print("Inserisci una scelta valida!!")
-                                continua_acquisto = input("Vuoi acquistare altre provviste s/n: ").strip().lower()
-                            if continua_acquisto == 'n':
-                                valido_merce = True
-                                acquistando = False
-                            else:
-                                valido_merce = True
-                except ValueError:
-                    print("Inserisci un numero valido.")
-    return denari, provviste
+            print("  Hai lasciato andare la scialuppa.")
 
+    elif nome_evento == "Epidemia":
+        print("  Epidemia a bordo!")
+        numero_medici = conta_membri_per_ruolo(lista_membri, "medico")
+        indice_medicinali = indice_merce("medicinali")
+        medicinali_disponibili = int(quantita_merci[indice_medicinali])
 
-def acquista_merci(denari):
-    print("------FASE 3: MERCI------")
-    merci_list = [
-        {"key": "medicinali", "descr": "bottiglie di medicinale", "prezzo": 1, "um": "bottiglia"},
-        {"key": "armi", "descr": "armi", "prezzo": 5, "um": "pezzo"},
-        {"key": "sale", "descr": "sale", "prezzo": 0.5, "um": "sacco"},
-        {"key": "stoffa", "descr": "stoffa", "prezzo": 2, "um": "telo"},
-        {"key": "coltelli", "descr": "coltelli", "prezzo": 0.5, "um": "pezzo"},
-        {"key": "diamanti", "descr": "diamanti", "prezzo": 1, "um": "pezzo"},
-    ]
-    merci = {}
-    for m in merci_list:
-        merci[m["key"]] = 0.0
-    print(f"Denari disponibili: {denari}")
-    acquistando = True
-    while acquistando:
-        scelta = input("Vuoi acquistare merci? (s/n): ").strip().lower()
-        if scelta == 'n':
-            acquistando = False
-        elif scelta != 's':
-            print("Scelta non valida.")
+        # Determina chi si ammala (ogni non-medico ha 70% di probabilita')
+        numero_ammalati = 0
+        for membro in lista_membri:
+            if membro["ruolo"] != "medico":
+                if random.random() < 0.7:
+                    numero_ammalati = numero_ammalati + 1
+
+        numero_curati = 0
+        numero_morti = 0
+
+        if numero_ammalati == 0:
+            print("  Nessuno si e' ammalato gravemente.")
         else:
-            for i, m in enumerate(merci_list, start=1):
-                print(f"{i} - {m['descr']} : {m['prezzo']} per {m['um']}")
-            valido_merce = False
-            while not valido_merce:
-                try:
-                    num = int(input("Inserisci il numero della merce: "))
-                    qty = float(input("Inserisci la quantità (minimo 1): "))
-                    if num < 1 or num > len(merci_list) or qty < 1:
-                        print("Hai inserito un numero o una quantità non valida.")
+            if numero_medici > 0 and medicinali_disponibili > 0:
+                numero_curabili = min(numero_ammalati, medicinali_disponibili)
+                quantita_merci[indice_medicinali] = quantita_merci[indice_medicinali] - numero_curabili
+                numero_curati = numero_curabili
+                numero_morti = numero_ammalati - numero_curati
+            else:
+                numero_morti = numero_ammalati
+
+            if numero_morti > 0:
+                rimossi = rimuovi_n_membri_non_medici(lista_membri, numero_morti)
+                numero_morti = rimossi
+
+            print(f"  Ammalati: {numero_ammalati} | Curati: {numero_curati} | Morti: {numero_morti}")
+            print(f"  Medicinali rimasti: {int(quantita_merci[indice_medicinali])}")
+
+    elif nome_evento == "Attacco pirata":
+        numero_pirati = random.randint(3, 10)
+        print(f"  Attacco pirata! La banda e' composta da {numero_pirati} pirati.")
+        indice_armi = indice_merce("armi")
+        numero_armi = int(quantita_merci[indice_armi])
+        numero_vivi = conta_membri_vivi(lista_membri)
+        numero_difensori = min(numero_armi, numero_vivi)
+        # Le armi usate vengono rimosse
+        quantita_merci[indice_armi] = quantita_merci[indice_armi] - numero_difensori
+        uomini_persi = min(numero_pirati - numero_difensori, numero_vivi)
+        if uomini_persi <= 0:
+            print("  Attacco respinto senza vittime!")
+        else:
+            print(f"  Persi {uomini_persi} membri dell'equipaggio.")
+            for _ in range(uomini_persi):
+                rimuovi_membro_casuale(lista_membri)
+        # Perdita casuale di merci
+        for i in range(len(CATEGORIE_MERCI)):
+            fattore = random.choice([0.0, 0.1, 0.25])
+            perdita = quantita_merci[i] * fattore
+            quantita_merci[i] = quantita_merci[i] - perdita
+            if quantita_merci[i] < 0:
+                quantita_merci[i] = 0.0
+
+    elif nome_evento == "Danni al timone":
+        print("  Danni al timone: servono riparazioni.")
+        numero_meccanici = conta_membri_per_ruolo(lista_membri, "meccanico")
+        if numero_meccanici > 0:
+            print("  C'e' un meccanico a bordo: riparazione rapida (+1 settimana).")
+            risultato["variazione_settimane"] = 1
+        else:
+            settimane_extra = random.randint(2, 4)
+            print(f"  Nessun meccanico: riparazione lenta (+{settimane_extra} settimane).")
+            risultato["variazione_settimane"] = settimane_extra
+        risultato["variazione_morale_evento"] = -3
+
+    elif nome_evento == "Raffiche di vento":
+        print("  Raffiche di vento: la nave e' fuori rotta.")
+        numero_navigatori = conta_membri_per_ruolo(lista_membri, "navigatore")
+        if numero_navigatori > 0:
+            print("  C'e' un navigatore a bordo: rotta corretta rapidamente (+1 settimana).")
+            risultato["variazione_settimane"] = 1
+        else:
+            settimane_extra = random.randint(2, 4)
+            print(f"  Nessun navigatore: si gira a vuoto (+{settimane_extra} settimane).")
+            risultato["variazione_settimane"] = settimane_extra
+        risultato["variazione_morale_evento"] = -3
+
+    elif nome_evento == "Avvistamento isola":
+        print("  Isola avvistata!")
+        risposta = input("  Vuoi approdare sull'isola per un'ispezione? (s/n): ").strip().lower()
+        while risposta != "s" and risposta != "n":
+            risposta = input("  Rispondi s oppure n: ").strip().lower()
+        if risposta == "n":
+            print("  Hai deciso di non approdare.")
+        else:
+            # Il viaggio si allunga in ogni caso
+            settimane_perse = random.randint(1, 2)
+            risultato["variazione_settimane"] = settimane_perse
+            # 50% abitata
+            if random.random() < 0.5:
+                print("  L'isola non e' abitata. Tempo perso.")
+            else:
+                # 50% ostili
+                if random.random() < 0.5:
+                    print("  Gli abitanti sono ostili! L'equipaggio viene messo in fuga.")
+                else:
+                    print("  Gli isolani sono amichevoli e donano merci!")
+                    if albatri_avvistati > 0 and not albatro_ucciso:
+                        minimo_dono = 20
+                        massimo_dono = 40
                     else:
-                        costo = merci_list[num-1]["prezzo"] * qty
-                        if costo > denari:
-                            print("Denari insufficienti.")
-                        else:
-                            denari -= costo
-                            merci[merci_list[num-1]["key"]] += qty
-                            print(f"Acquistati {qty} {merci_list[num-1]['um']} di {merci_list[num-1]['descr']}. Denari rimasti: {denari}")
-                            continua_acq = input("Vuoi acquistare altre merci s/n: ").strip().lower()
-                            while continua_acq != 's' and continua_acq != 'n':
-                                print("Inserisci una scelta valida!!")
-                                continua_acq = input("Vuoi acquistare altre merci s/n: ").strip().lower()
-                            if continua_acq == 'n':
-                                valido_merce = True
-                                acquistando = False
-                            else:
-                                valido_merce = True
-                except ValueError:
-                    print("Inserisci un numero valido.")
-    return denari, merci
+                        minimo_dono = 5
+                        massimo_dono = 20
+                    for i in range(len(CATEGORIE_MERCI)):
+                        quantita_merci[i] = quantita_merci[i] + random.randint(minimo_dono, massimo_dono)
+                    risultato["variazione_morale_evento"] = 5
+
+    elif nome_evento == "Nessun imprevisto":
+        print("  Settimana tranquilla, nessun imprevisto.")
+
+    return risultato
+def controlla_scorte(
+    lista_membri,
+    quantita_provviste,
+    settimane_rimanenti,
+    razioni_correnti,
+    delta_morale
+):
+    """
+    razioni_correnti[i] = moltiplicatore razione per la provvista i (1.0 normale, 0.5 dimezzata, ecc.)
+    delta_morale = variazione morale accumulata per settimana (viene modificata qui)
+    Restituisce delta_morale aggiornato.
+    """
+    numero_membri = conta_membri_vivi(lista_membri)
+
+    for i in range(len(CATEGORIE_PROVVISTE)):
+        nome_provvista = CATEGORIE_PROVVISTE[i]["nome"]
+        consumo_base = CATEGORIE_PROVVISTE[i]["consumo"]
+        consumo_settimana = consumo_base * razioni_correnti[i] * numero_membri
+
+        # Consumo della settimana corrente
+        quantita_provviste[i] = quantita_provviste[i] - consumo_settimana
+        if quantita_provviste[i] < 0:
+            quantita_provviste[i] = 0.0
+
+        quantita_rimasta = quantita_provviste[i]
+
+        # Controllo esaurimento
+        if quantita_rimasta <= 0 and consumo_settimana > 0:
+            print(f"  ATTENZIONE: {nome_provvista} ESAURITA! Morale -10 a settimana.")
+            delta_morale = delta_morale - 10
+
+        else:
+            # Fabbisogno per le settimane rimanenti
+            fabbisogno_futuro = consumo_base * razioni_correnti[i] * numero_membri * settimane_rimanenti
+
+            # Troppo poco: proponi di dimezzare
+            if quantita_rimasta < fabbisogno_futuro and razioni_correnti[i] > 0.125:
+                print(f"  Le scorte di {nome_provvista} non bastano per {settimane_rimanenti} settimane restanti.")
+                print(f"  Rimaste: {round(quantita_rimasta, 2)} | Fabbisogno: {round(fabbisogno_futuro, 2)}")
+                risposta = input(f"  Vuoi dimezzare le razioni di {nome_provvista}? (s/n): ").strip().lower()
+                while risposta != "s" and risposta != "n":
+                    risposta = input("  Rispondi s oppure n: ").strip().lower()
+                if risposta == "s":
+                    razioni_correnti[i] = razioni_correnti[i] * 0.5
+                    delta_morale = delta_morale - 5
+                    print(f"  Razioni di {nome_provvista} dimezzate. Morale -5 a settimana.")
+
+            # Troppo: proponi di raddoppiare
+            fabbisogno_doppio = consumo_base * razioni_correnti[i] * numero_membri * settimane_rimanenti * 2
+            if quantita_rimasta >= fabbisogno_doppio and razioni_correnti[i] <= 1.0:
+                print(f"  Le scorte di {nome_provvista} sono abbondanti!")
+                risposta = input(f"  Vuoi raddoppiare le razioni di {nome_provvista}? (s/n): ").strip().lower()
+                while risposta != "s" and risposta != "n":
+                    risposta = input("  Rispondi s oppure n: ").strip().lower()
+                if risposta == "s":
+                    razioni_correnti[i] = razioni_correnti[i] * 2.0
+                    delta_morale = delta_morale + 5
+                    print(f"  Razioni di {nome_provvista} raddoppiate. Morale +5 a settimana.")
+
+    return delta_morale
 
 
-def salva_partita_su_file(stato, filename="salvataggio.json"):
-    try:
-        with open(filename, 'w') as f:
-            json.dump(stato, f, indent=2)
-        print(f"Partita salvata su '{filename}'.")
-    except Exception as e:
-        print(f"Errore durante il salvataggio: {e}")
+# ============================================================
+# STEP 3: AGGIORNAMENTO MORALE
+# ============================================================
+
+def aggiorna_morale(lista_membri, delta_morale, variazione_evento):
+    """
+    Applica delta_morale (accumulato) + variazione_evento (una tantum) a tutti i membri.
+    Rimuove i membri con morale <= 0.
+    Restituisce il numero di morti per morale.
+    """
+    variazione_totale = delta_morale + variazione_evento
+    morti_per_morale = 0
+    # Iteriamo al contrario per poter rimuovere senza problemi di indici
+    i = len(lista_membri) - 1
+    while i >= 0:
+        lista_membri[i]["morale"] = lista_membri[i]["morale"] + variazione_totale
+        if lista_membri[i]["morale"] > 100:
+            lista_membri[i]["morale"] = 100
+        if lista_membri[i]["morale"] <= 0:
+            lista_membri.pop(i)
+            morti_per_morale = morti_per_morale + 1
+        i = i - 1
+    return morti_per_morale
 
 
-def carica_partita_da_file(filename="salvataggio.json"):
-    try:
-        with open(filename, 'r') as f:
-            stato = json.load(f)
-        print(f"Caricamento da '{filename}' riuscito.")
-        return stato
-    except FileNotFoundError:
-        print("Nessun salvataggio trovato.")
-        return {}
-    except Exception as e:
-        print(f"Errore durante il caricamento: {e}")
-        return {}
+# ============================================================
+# STEP 4: RIEPILOGO FINE SETTIMANA
+# ============================================================
+
+def mostra_riepilogo(lista_membri, quantita_provviste, quantita_merci):
+    print()
+    print("  --- RIEPILOGO FINE SETTIMANA ---")
+    print(f"  Membri vivi: {conta_membri_vivi(lista_membri)}")
+    for membro in lista_membri:
+        print(f"    {membro['ruolo']} - morale: {membro['morale']}")
+    print("  Provviste:")
+    for i in range(len(CATEGORIE_PROVVISTE)):
+        print(f"    {CATEGORIE_PROVVISTE[i]['nome']}: {round(quantita_provviste[i], 2)} {CATEGORIE_PROVVISTE[i]['unita']}")
+    print("  Merci:")
+    for i in range(len(CATEGORIE_MERCI)):
+        print(f"    {CATEGORIE_MERCI[i]['descrizione']}: {round(quantita_merci[i], 2)}")
+def calcola_ammutinamento(
+    lista_membri,
+    razioni_correnti,
+    albatri_avvistati,
+    albatro_ucciso,
+    settimane_totali
+):
+    punteggio = 0
+    cause = []
+    razione_ridotta = False
+    for i in range(len(CATEGORIE_PROVVISTE)):
+        if razioni_correnti[i] < 1.0:
+            razione_ridotta = True
+    if razione_ridotta:
+        punteggio = punteggio + 30
+        cause.append("Razioni cibo ridotte (+30)")
+    numero_cuochi = conta_membri_per_ruolo(lista_membri, "cuoco")
+    if numero_cuochi == 0:
+        punteggio = punteggio + 30
+        cause.append("Nessun cuoco a bordo (+30)")
+    if albatri_avvistati > 0 and albatro_ucciso:
+        punteggio = punteggio + 30
+        cause.append("Presagio di sfiga: albatro ucciso (+30)")
+    if albatri_avvistati > 0 and not albatro_ucciso:
+        punteggio = punteggio - 20
+        cause.append("Ottimismo: albatro avvistato e rispettato (-20)")
+    numero_vivi = conta_membri_vivi(lista_membri)
+    if numero_vivi > 12:
+        punteggio = punteggio + 30
+        cause.append("La nave e' troppo affollata (+30)")
+
+    # Settimane extra rispetto alle 8 base
+    settimane_extra = settimane_totali - SETTIMANE_BASE
+    if settimane_extra > 0:
+        punteggio = punteggio + settimane_extra * 10
+        cause.append(f"Viaggio troppo lungo: +{settimane_extra} settimane (+{settimane_extra * 10})")
+    elif settimane_extra < 0:
+        punteggio = punteggio + settimane_extra * 10  # sottrae
+        cause.append(f"Viaggio accorciato: {settimane_extra} settimane ({settimane_extra * 10})")
+
+    return punteggio, cause
 
 
-def shop():
-    denari = 2000
-    flotta, denari = acquista_equipaggio()
-    denari, provviste = acquista_provviste(denari)
-    denari, merci = acquista_merci(denari)
-    print(f"Perfetto, ora sei pronto per il viaggio!! Denari rimasti: {denari}")
-    return flotta, provviste, merci, denari
-
-
-def viaggio(flotta, provviste, merci, settimane_totali=8, stato=None, interattivo=True):
-    eventi = [
-        {"nome": "Uomo in mare", "ripetibile": False, "peso": 1},
-        {"nome": "Verdura in mare", "ripetibile": False, "peso": 2},
-        {"nome": "Frutta in mare", "ripetibile": False, "peso": 2},
-        {"nome": "Carne in mare", "ripetibile": False, "peso": 2},
-        {"nome": "Acqua in mare", "ripetibile": False, "peso": 2},
-        {"nome": "Pesca miracolosa", "ripetibile": False, "peso": 1},
-        {"nome": "Tempesta miracolosa", "ripetibile": False, "peso": 1},
-        {"nome": "Venti favorevoli", "ripetibile": True, "peso": 3},
-        {"nome": "Cattivo tempo", "ripetibile": False, "peso": 2},
-        {"nome": "Ondata", "ripetibile": False, "peso": 1},
-        {"nome": "Infestazione ratti", "ripetibile": False, "peso": 2},
-        {"nome": "Avvistamento albatro", "ripetibile": True, "limite": 3, "peso": 2},
-        {"nome": "Avvistamento scialuppa", "ripetibile": False, "peso": 1},
-        {"nome": "Epidemia", "ripetibile": False, "peso": 1},
-        {"nome": "Attacco pirata", "ripetibile": False, "peso": 1},
-        {"nome": "Danni al timone", "ripetibile": False, "peso": 2},
-        {"nome": "Raffiche di vento", "ripetibile": False, "peso": 2},
-        {"nome": "Avvistamento isola", "ripetibile": False, "peso": 1},
-        {"nome": "Nessun imprevisto", "ripetibile": True, "peso": 3},
-    ]
-
-    # inizializza stato: usa lo stato caricato se presente
-    if stato and isinstance(stato, dict):
-        settimana_corrente = stato.get("settimana_corrente", 1)
-        conta_eventi = stato.get("conta_eventi", {})
-        storia_eventi = stato.get("storia_eventi", [])
-    else:
-        settimana_corrente = 1
-        conta_eventi = {}
-        storia_eventi = []
-    stima_iniziale = settimane_totali
-
-    # Stato extra
-    razioni = {"verdura": 1.0, "frutta": 1.0, "carne": 1.0, "acqua": 1.0}
-    albatro_avvistamenti = 0
-    albatro_ucciso = False
-
+def gestisci_ammutinamento(
+    lista_membri,
+    razioni_correnti,
+    albatri_avvistati,
+    albatro_ucciso,
+    settimane_totali
+):
+    """
+    Restituisce True se c'e' ammutinamento (gioco finisce), False altrimenti.
+    """
+    punteggio, cause = calcola_ammutinamento(
+        lista_membri, razioni_correnti, albatri_avvistati, albatro_ucciso, settimane_totali
+    )
+    if punteggio >= 100:
+        print()
+        print("  !!! AMMUTINAMENTO !!! L'equipaggio abbandona la nave.")
+        print("  Cause:")
+        for causa in cause:
+            print(f"    - {causa}")
+        return True
+    elif punteggio >= 1:
+        print()
+        print(f"  ATTENZIONE: rischio ammutinamento (punteggio: {punteggio}).")
+        print("  Cause:")
+        for causa in cause:
+            print(f"    - {causa}")
+    return False
+def ricalcola_settimane_per_morale(lista_membri, settimane_totali):
+    numero_vivi = conta_membri_vivi(lista_membri)
+    if numero_vivi == 0:
+        return settimane_totali
+    numero_morale_basso = 0
+    for membro in lista_membri:
+        if membro["morale"] <= 30:
+            numero_morale_basso = numero_morale_basso + 1
+    if numero_morale_basso > numero_vivi / 2:
+        print("  Piu' della meta' dell'equipaggio e' demoralizzata: viaggio +1 settimana.")
+        settimane_totali = settimane_totali + 1
+    return settimane_totali
+def viaggio(
+    lista_membri,
+    quantita_provviste,
+    quantita_merci,
+    denari_rimasti,
+    settimane_totali,
+    settimana_di_partenza,
+    contatore_eventi,
+    albatri_avvistati,
+    albatro_ucciso,
+    razioni_correnti,
+    delta_morale
+):
+    print()
     print("-------BENVENUTI-------")
     print("SI DA IL VIA AL VIAGGIO")
     print("-----BUONA FORTUNA-----")
     print(f"Durata stimata: {settimane_totali} settimane")
-
-    # Assicuriamoci che le provviste siano presenti
-    for key in ("verdura", "frutta", "carne", "acqua"):
-        if key not in provviste:
-            provviste[key] = 0.0
-
-    def frazione_a_testo(frazione):
-        d = frazione - 0.5
-        if d < 0:
-            d = -d
-        if d < 1e-9:
-            return "1/2"
-        d = frazione - (1/3)
-        if d < 0:
-            d = -d
-        if d < 1e-9:
-            return "1/3"
-        d = frazione - 0.25
-        if d < 0:
-            d = -d
-        if d < 1e-9:
-            return "1/4"
-        d = frazione - 0.2
-        if d < 0:
-            d = -d
-        if d < 1e-9:
-            return "1/5"
-        return f"{int(frazione * 100)}%"
-
-    def conta_membri_vivi():
-        totale = 0
-        for lista in flotta.values():
-            totale += len(lista)
-        return totale
-
-    def scegli_evento():
-        disponibili = []
-        pesi = []
-        for e in eventi:
-            nome = e["nome"]
-            occorrenze = conta_eventi.get(nome, 0)
-            aggiungi = True
-            if not e.get("ripetibile", False) and occorrenze > 0:
-                aggiungi = False
-            if e.get("limite") is not None and occorrenze >= e["limite"]:
-                aggiungi = False
-            if aggiungi:
-                disponibili.append(e)
-                pesi.append(e.get("peso", 1))
-        if not disponibili:
-            return random.choice(eventi)
-        return random.choices(disponibili, weights=pesi, k=1)[0]
-
-    def rimuovi_membro_casuale():
-        ruoli_disponibili = []
-        for r, lst in flotta.items():
-            if len(lst) > 0:
-                ruoli_disponibili.append(r)
-        if len(ruoli_disponibili) == 0:
-            return "", {}
-        ruolo = random.choice(ruoli_disponibili)
-        idx = random.randrange(len(flotta[ruolo]))
-        membro = flotta[ruolo].pop(idx)
-        return ruolo, membro
-
-    def aggiungi_membro(ruolo, morale, pagato):
-        if ruolo not in flotta:
-            flotta[ruolo] = []
-        flotta[ruolo].append({"morale": morale, "pagato": pagato})
-
-    def rimuovi_n_membri_non_medici(n):
-        rimossi = []
-        while n > 0:
-            candidati = []
-            for r in flotta.keys():
-                if r != "medico" and len(flotta[r]) > 0:
-                    candidati.append(r)
-            if len(candidati) == 0:
-                n = 0
-            else:
-                ruolo = random.choice(candidati)
-                idx = random.randrange(len(flotta[ruolo]))
-                flotta[ruolo].pop(idx)
-                rimossi.append(ruolo)
-                n -= 1
-        return rimossi
-
-    def gestisci_evento(evt):
-        nome = evt["nome"]
-        conta_eventi[nome] = conta_eventi.get(nome, 0) + 1
-        storia_eventi.append(nome)
-        data_e_ora = str(datetime.now())
-        print(f"[" + data_e_ora + "] Settimana " + {settimana_corrente} + ": " + nome)
-        risultato = {}
-
-        # mappa per gli eventi che causano perdite in mare
-        in_mare_map = {
-            "Verdura in mare": "verdura",
-            "Frutta in mare": "frutta",
-            "Carne in mare": "carne",
-            "Acqua in mare": "acqua",
-        }
-
-        if nome == "Uomo in mare":
-            ruolo, membro = rimuovi_membro_casuale()
-            if ruolo == "":
-                print("Non c'era nessuno a bordo da perdere.")
-            else:
-                print("Tragico: un " + ruolo + " è finito in mare e non ce l'ha fatta.")
-                risultato["morto"] = ruolo
-            return risultato
-
-        if nome in in_mare_map:
-            fraz = random.choice([0.5, 1/3, 0.25, 0.2])
-            tipo = in_mare_map[nome]
-            quantita = provviste.get(tipo, 0)
-            perdita = quantita * fraz
-            nuovo_val = quantita - perdita
-            if nuovo_val < 0:
-                nuovo_val = 0.0
-            provviste[tipo] = nuovo_val
-            print(f"Perdita di " + frazione_a_testo(fraz) + " della scorta (" + tipo + "): -" + {round(perdita, 2)} + " " + tipo + ".")
-            risultato["perdita_tipo"] = tipo
-            risultato["perdita_frac"] = fraz
-            risultato["perdita_qty"] = perdita
-            return risultato
-
-        if nome == "Pesca miracolosa":
-            kg = random.randint(11, 20)
-            provviste["carne"] = provviste.get("carne", 0) + kg
-            print(f"Pesca miracolosa: raccolti circa " + {kg} + " kg di pesce (aggiunti a 'carne').")
-            risultato["pesca_kg"] = kg
-            risultato["morale_variazione"] = 5
-            return risultato
-
-        if nome == "Tempesta miracolosa":
-            aggiunta = random.randint(11, 20)
-            provviste["acqua"] = provviste.get("acqua", 0) + aggiunta
-            print(f"Tempesta miracolosa: alcuni membri hanno raccolto acqua! +" +{aggiunta} + " barili.")
-            risultato["acqua_aggiunta"] = aggiunta
-            return risultato
-
-        if nome == "Venti favorevoli":
-            morale_gain = random.randint(5, 15)
-            if settimane_totali - settimana_corrente >= 1:
-                print(f"Venti favorevoli: il viaggio procede più velocemente (-1 settimana). Morale +" +{morale_gain} + ".")
-                risultato["accorcia_settimane"] = 1
-                risultato["morale_variazione"] = morale_gain
-            else:
-                print(f"Venti favorevoli, ma il beneficio è minimo. Morale +" +{morale_gain} + ".")
-                risultato["morale_variazione"] = morale_gain
-            return risultato
-
-        if nome == "Cattivo tempo":
-            fraz = random.choice([0.5, 1/3, 0.25, 0.2])
-            perdita = merci.get("medicinali", 0) * fraz
-            nuovo_med = merci.get("medicinali", 0) - perdita
-            if nuovo_med < 0:
-                nuovo_med = 0
-            merci["medicinali"] = nuovo_med
-            print(f"Cattivo tempo: parte delle bottiglie di medicinale si rovescia (-" + frazione_a_testo(fraz) + "). Perduta: " + {round(perdita, 2)} + ".")
-            risultato["perdita_medicinali"] = perdita
-            risultato["morale_variazione"] = -3
-            return risultato
-        if nome == "Ondata":
-            fraz = random.choice([0.5, 1/3, 0.25, 0.2])
-            perdita = merci.get("armi", 0) * fraz
-            nuovo_armi = merci.get("armi", 0) - perdita
-            if nuovo_armi < 0:
-                nuovo_armi = 0
-            merci["armi"] = nuovo_armi
-            print(f"Ondata: parte delle armi è finita in mare (-" + frazione_a_testo(fraz) + "). Perduta: " + {round(perdita, 2)} + ".")
-            risultato["onde_perdita_frac"] = fraz
-            risultato["onde_perdita_tipo"] = "armi"
-            risultato["morale_variazione"] = -3
-            return risultato
-
-        if nome == "Infestazione ratti":
-            fraz = random.choice([0.5, 1/3, 0.25, 0.2])
-            perdita = merci.get("stoffa", 0) * fraz
-            if perdita > 0:
-                nuovo_stoffa = merci.get("stoffa", 0) - perdita
-                if nuovo_stoffa < 0:
-                    nuovo_stoffa = 0
-                merci["stoffa"] = nuovo_stoffa
-            print("Infestazione di ratti: alcune stoffe sono state rovinate.")
-            risultato["ratti"] = [("stoffa", perdita)] if perdita > 0 else []
-            risultato["morale_variazione"] = -2
-            return risultato
-
-        if nome == "Avvistamento albatro":
-            # non modifichiamo direttamente albatro_avvistamenti: restituiamo l'incremento
-            risultato["albatro_inc"] = 1
-            print("Albatro avvistato: buon auspicio per l'equipaggio.")
-            risultato["albatro_avvistato"] = True
-            num_armi = merci.get("armi", 0)
-            membri_vivi = conta_membri_vivi()
-            if num_armi >= 1 and membri_vivi > 0:
-                print("Hai armi a bordo. Puoi provare a sparare all'albatro per ottenere carne.")
-                print("Attenzione: le armi usate non potranno essere barattate e saranno rimosse dalle merci.")
-                scelta = input("Vuoi provare a sparare all'albatro? (s/n): ").strip().lower()
-                if scelta == 's':
-                    if num_armi < membri_vivi:
-                        tentativi = int(num_armi)
-                    else:
-                        tentativi = int(membri_vivi)
-                    print(f"Hai a disposizione " + {tentativi} + " colpi (min(numero armi, membri vivi)).")
-                    colpi = tentativi
-                    successi = 0
-                    for _ in range(colpi):
-                        if random.random() < 0.5:
-                            successi += 1
-                    nuovo_armi = merci.get("armi", 0) - colpi
-                    if nuovo_armi < 0:
-                        nuovo_armi = 0
-                    merci["armi"] = nuovo_armi
-                    risultato["armi_usate"] = colpi
-                    if successi > 0:
-                        aggiunta_carne = random.randint(10, 15)
-                        provviste["carne"] = provviste.get("carne", 0) + aggiunta_carne
-                        print(f"Albatro abbattuto! +" + {aggiunta_carne} + " kg di carne.")
-                        risultato["albatro_ucciso"] = True
-                    else:
-                        print("Hai sparato ma l'albatro non è stato abbattuto.")
-                        risultato["albatro_ucciso"] = False
-                else:
-                    print("Hai deciso di non sparare all'albatro.")
-            else:
-                print("Non ci sono armi o non ci sono abbastanza persone per provare a sparare.")
-            return risultato
-
-        if nome == "Avvistamento scialuppa":
-            print("Scialuppa alla deriva con 4 uomini e una cassa: vuoi salvare i naufraghi?")
-            scelta = input("Salvare i 4 uomini? (s/n): ").strip().lower()
-            if scelta == 's':
-                ruoli_possibili = list(flotta.keys())
-                for _ in range(4):
-                    ruolo = random.choice(ruoli_possibili)
-                    morale_nuovo = random.randint(25, 75)
-                    aggiungi_membro(ruolo, morale_nuovo, False)
-                for k in merci:
-                    if k in ("medicinali", "armi", "sale", "stoffa", "coltelli", "diamanti"):
-                        aggiunta = random.randint(10, 20)
-                        merci[k] = merci.get(k, 0) + aggiunta
-                print("Hai salvato 4 uomini; sono stati aggiunti alla flotta (non pagati). Cassa svuotata nelle merci.")
-                risultato["scialuppa_salvata"] = 4
-            else:
-                print("Hai lasciato la scialuppa al largo. Niente saldo.")
-            return risultato
-
-        if nome == "Epidemia":
-            lista_malati = []
-            for ruolo in flotta:
-                if ruolo != "medico":
-                    membri = flotta[ruolo]
-                    for _ in range(len(membri)):
-                        if random.random() < 0.7:
-                            lista_malati.append(ruolo)
-            if not lista_malati:
-                print("Epidemia: nessuno si è ammalato in modo fatale.")
-                risultato["ammalati"] = 0
-                return risultato
-            medici = 0
-            if flotta.get("medico"):
-                medici = len(flotta["medico"])
-            medicinali_disponibili = merci.get("medicinali", 0)
-            ammalati = len(lista_malati)
-            curati = 0
-            morti = []
-            if medici > 0 and medicinali_disponibili > 0:
-                if ammalati < medicinali_disponibili:
-                    curabili = ammalati
-                else:
-                    curabili = int(medicinali_disponibili)
-                nuovo_med = merci.get("medicinali", 0) - curabili
-                if nuovo_med < 0:
-                    nuovo_med = 0
-                merci["medicinali"] = nuovo_med
-                curati = curabili
-                da_odiare = ammalati - curati
-                if da_odiare > 0:
-                    morti = rimuovi_n_membri_non_medici(da_odiare)
-            else:
-                morti = rimuovi_n_membri_non_medici(ammalati)
-            print(f"Epidemia: ammalati " + {ammalati} + ", curati " + {curati} + ", morti " + {len(morti)} + ". Medicinali rimanenti: " + {medicinali_disponibili})
-            risultato["ammalati"] = ammalati
-            risultato["curati"] = curati
-            risultato["morti"] = morti
-            return risultato
-
-        if nome == "Attacco pirata":
-            numero_pirati = random.randint(3, 10)
-            membri_vivi = conta_membri_vivi()
-            num_armi = merci.get("armi", 0)
-            if num_armi < membri_vivi:
-                numero_difensori = int(num_armi)
-            else:
-                numero_difensori = membri_vivi
-            nuovo_armi = merci.get("armi", 0) - numero_difensori
-            if nuovo_armi < 0:
-                nuovo_armi = 0
-            merci["armi"] = nuovo_armi
-            perdite = []
-            uomini_persi_calc = numero_pirati - numero_difensori
-            if uomini_persi_calc > 0:
-                if uomini_persi_calc < membri_vivi:
-                    uomini_persi = uomini_persi_calc
-                else:
-                    uomini_persi = membri_vivi
-                for _ in range(uomini_persi):
-                    ruolo, membro = rimuovi_membro_casuale()
-                    if ruolo:
-                        perdite.append(ruolo)
-                print(f"Attacco pirata! Persi " + {len(perdite)} + " membri.")
-            else:
-                print("Attacco pirata respinto senza vittime!")
-            perdite_merci = []
-            for k in merci:
-                perdita = merci[k] * random.choice([0.0, 0.1, 0.25])
-                if perdita > 0:
-                    nuovo_k = merci[k] - perdita
-                    if nuovo_k < 0:
-                        nuovo_k = 0
-                    merci[k] = nuovo_k
-                    perdite_merci.append((k, perdita))
-            risultato["pirati_morti"] = perdite
-            risultato["pirati_perdite_merci"] = perdite_merci
-            risultato["armi_usate"] = numero_difensori
-            return risultato
-
-        if nome == "Danni al timone":
-            print("Danni al timone: servono riparazioni.")
-            if flotta.get("meccanico"):
-                print("C'è un meccanico a bordo: riparazione più veloce (+1 settimana).")
-                risultato["aggiungi_settimane"] = 1
-            else:
-                aggiungi = random.randint(2, 4)
-                print(f"Nessun meccanico: riparazione lunga (+" + {aggiungi} + " settimane).")
-                risultato["aggiungi_settimane"] = aggiungi
-            risultato["morale_variazione"] = -3
-            return risultato
-
-        if nome == "Raffiche di vento":
-            print("Raffiche di vento: rotta allungata e difficoltà.")
-            if flotta.get("navigatore"):
-                print("C'è un navigatore: impatto ridotto (+1 settimana).")
-                risultato["aggiungi_settimane"] = 1
-            else:
-                aggiungi = random.randint(2, 4)
-                print(f"Nessun navigatore: devi allungare la rotta (+" + {aggiungi} + " settimane).")
-                risultato["aggiungi_settimane"] = aggiungi
-            risultato["morale_variazione"] = -3
-            return risultato
-
-        if nome == "Avvistamento isola":
-            print("Isola avvistata: vuoi approdare per ispezionare?")
-            scelta = input("Approdi sull'isola? (s/n): ").strip().lower()
-            if scelta != 's':
-                print("Decidi di non approdare.")
-                return risultato
-            if random.random() < 0.5:
-                print("L'isola non è abitata. Nulla di fatto, ma tempo perso.")
-                risultato["aggiungi_settimane"] = 1
-                return risultato
-            if random.random() < 0.5:
-                print("Gli abitanti sono ostili e mettono in fuga l'equipaggio.")
-                risultato["aggiungi_settimane"] = 1
-                return risultato
-            print("Isola amichevole: gli isolani donano merci.")
-            bonus_min = 5
-            bonus_max = 20
-            if albatro_avvistamenti > 0 and not albatro_ucciso:
-                bonus_min = 20
-                bonus_max = 40
-            for k in merci:
-                if k in ("medicinali", "armi", "sale", "stoffa", "coltelli", "diamanti"):
-                    aggiunta = random.randint(bonus_min, bonus_max)
-                    merci[k] = merci.get(k, 0) + aggiunta
-            risultato["aggiungi_settimane"] = random.randint(1, 2)
-            risultato["isola_donazioni"] = True
-            risultato["morale_variazione"] = 5
-            return risultato
-
-        if nome == "Nessun imprevisto":
-            print("Settimana tranquilla: nessun imprevisto.")
-            return risultato
-
-        print("Evento non gestito.")
-        return risultato
-
-    def anima_nave():
-        pista = 20
-        passi = pista + 1
-        durata_settimana = 2.0  # secondi per settimana (ridotto per test più veloci)
-        ritardo = durata_settimana / passi
-        meta = passi // 2
-        for posizione in range(passi):
-            onde = "~" * posizione
-            print(onde + "⛵")
-            if posizione == meta:
-                risposta_valida = False
-                while not risposta_valida:
-                    risposta = input("Vuoi saltare questa settimana? (y/n): ").strip().lower()
-                    if risposta == 'y':
-                        return True
-                    elif risposta == 'n':
-                        risposta_valida = True
-                    else:
-                        print("Rispondi 'y' per sì oppure 'n' per no.")
-                time.sleep(ritardo)
-            else:
-                time.sleep(ritardo)
-        return False
-
-    risultati = []
+    settimana_corrente = settimana_di_partenza
     while settimana_corrente <= settimane_totali:
-        print(f"--- SETTIMANA " + {settimana_corrente} + " di " + {settimane_totali} + " ---")
-        evento_scelto = scegli_evento()
-        risultato = gestisci_evento(evento_scelto)
-        # applica aggiornamenti di stato restituiti dall'evento
-        if risultato.get("albatro_inc"):
-            albatro_avvistamenti = albatro_avvistamenti + risultato.get("albatro_inc", 0)
-        if "albatro_ucciso" in risultato:
-            albatro_ucciso = bool(risultato.get("albatro_ucciso"))
-        risultati.append({"settimana": settimana_corrente, "evento": evento_scelto["nome"], "risultato": risultato})
-
-        # Se tutta la flotta è stata annientata, termina la partita
-        totale_membri = 0
-        for lista in flotta.values():
-            totale_membri += len(lista)
-        if totale_membri <= 0:
-            print("Tutti i membri della flotta sono morti. Il viaggio è fallito. GAME OVER")
-            return {"settimane": settimane_totali, "risultati": risultati, "conteggi": conta_eventi, "storia": storia_eventi, "morto": True}
-
-        # applica modifiche temporali
-        if "aggiungi_settimane" in risultato:
-            aggiungi = risultato["aggiungi_settimane"]
-            settimane_totali += aggiungi
-            print(f"Il viaggio si allunga di {aggiungi} settimana/e. Nuova durata stimata: {settimane_totali} settimane.")
-        if "accorcia_settimane" in risultato:
-            acc = risultato["accorcia_settimane"]
-            nuovo_val = settimane_totali - acc
-            if nuovo_val < settimana_corrente:
+        print()
+        print(f"=== SETTIMANA {settimana_corrente} di {settimane_totali} ===")
+        nome_evento = scegli_evento(contatore_eventi)
+        contatore_eventi[nome_evento] = contatore_eventi.get(nome_evento, 0) + 1
+        risultato_evento = gestisci_evento(
+            nome_evento,
+            lista_membri,
+            quantita_provviste,
+            quantita_merci,
+            settimane_totali,
+            albatri_avvistati,
+            albatro_ucciso
+        )
+        albatri_avvistati = albatri_avvistati + risultato_evento["albatri_avvistati_aggiunta"]
+        if risultato_evento["albatro_ora_ucciso"]:
+            albatro_ucciso = True
+        variazione_settimane = risultato_evento["variazione_settimane"]
+        if variazione_settimane != 0:
+            settimane_totali = settimane_totali + variazione_settimane
+            if settimane_totali < settimana_corrente:
                 settimane_totali = settimana_corrente
+            if variazione_settimane > 0:
+                print(f"  Il viaggio si allunga di {variazione_settimane} settimana/e. Nuova durata: {settimane_totali}.")
             else:
-                settimane_totali = nuovo_val
-            print(f"Il viaggio si accorcia di {acc} settimana/e. Nuova durata stimata: {settimane_totali} settimane.")
-
-        # applica variazione di morale a tutti i membri, se presente
-        if "morale_variazione" in risultato:
-            varia = risultato["morale_variazione"]
-            if varia != 0:
-                for lista in flotta.values():
-                    for membro in lista:
-                        membro_morale = membro.get("morale", 0)
-                        nuovo = membro_morale + varia
-                        if nuovo > 100:
-                            nuovo = 100
-                        if nuovo < 0:
-                            nuovo = 0
-                        membro["morale"] = nuovo
-                print(f"Morale modificato di {varia} per tutti i membri.")
-
-        if interattivo:
-            saltata = anima_nave()
-            if saltata:
-                print("Settimana saltata dall'utente.")
-        else:
-            print("(modalità non interattiva: salto animazione)")
-
-        # Alla fine della settimana (esclusa l'ultima) offrire salvataggio
-        if interattivo and settimana_corrente < settimane_totali:
-            scelta_salvataggio_valida = False
-            while not scelta_salvataggio_valida:
-                scelta_salva = input("Vuoi salvare la partita? (s/n): ").strip().lower()
-                if scelta_salva == 's':
-                    stato_da_salvare = {
-                        'flotta': flotta,
-                        'provviste': provviste,
-                        'merci': merci,
-                        'settimane_totali': settimane_totali,
-                        'settimana_corrente': settimana_corrente,
-                        'conta_eventi': conta_eventi,
-                        'storia_eventi': storia_eventi,
-                        'albatro_avvistamenti': albatro_avvistamenti,
-                        'albatro_ucciso': albatro_ucciso,
-                    }
-                    salva_partita_su_file(stato_da_salvare)
-                    scelta_salvataggio_valida = True
-                elif scelta_salva == 'n':
-                    scelta_salvataggio_valida = True
-                else:
-                    print("Scelta non valida. Rispondi 's' o 'n'.")
-
-        settimana_corrente += 1
-
-    print("RIEPILOGO DEL VIAGGIO")
-    if conta_eventi:
-        print("- Eventi registrati:")
-        for nome in conta_eventi:
-            print(f" - " + {nome} + ": " + {conta_eventi[nome]} + " volta/e")
-    else:
-        print("Nessun evento registrato.")
-    print("Stato finale flotta:")
-    for ruolo in flotta:
-        print(f"  " +{ruolo} + ": " + {len(flotta[ruolo])} + " membri")
-    print("Stato finale provviste:")
-    for k in provviste:
-        print(f"  " + {k} + ": " + {round(provviste[k], 2)})
-    print("Stato finale merci:")
-    for k in merci:
-        print(f"  " + {k} + ": " + {round(merci[k], 2)})
-    print("Simulazione completata.")
-    return {"settimane": settimane_totali, "risultati": risultati, "conteggi": conta_eventi, "storia": storia_eventi}
-
-
-def main():
-    mostra_menu_principale()
-    scelta_corretta = False
-    while not scelta_corretta:
-        scelta = input("Benvenuto in NUOVO MONDO!! Scegli: ").strip()
-        if scelta == "1":
-            scelta_corretta = True
-            flotta, provviste, merci, denari = shop()
-            viaggio(flotta, provviste, merci, settimane_totali=8, interattivo=True)
-        elif scelta == "2":
-            scelta_corretta = True
-            stato = carica_partita_da_file()
-            if not stato:
-                print("Nessun salvataggio trovato. Avvio nuova partita.")
-                flotta, provviste, merci, denari = shop()
-                viaggio(flotta, provviste, merci, settimane_totali=8, interattivo=True)
-            else:
-                loaded_flotta = stato.get('flotta', {})
-                loaded_provviste = stato.get('provviste', {})
-                loaded_merci = stato.get('merci', {})
-                settimane_totali = stato.get('settimane_totali', 8)
-                viaggio(loaded_flotta, loaded_provviste, loaded_merci, settimane_totali=settimane_totali, stato=stato, interattivo=True)
-        else:
-            print("Errore d'inserimento")
-
-
-main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   
+                print(f"  Il viaggio si accorcia di {abs(variazione_settimane)} settimana/e. Nuova durata: {settimane_totali}.")
+        if conta_membri_vivi(lista_membri) <= 0:
+            print("Tutti i membri dell'equipaggio sono morti. GAME OVER.")
+            return False, lista_membri, quantita_provviste, quantita_merci, settimane_totali, albatri_avvistati, albatro_ucciso, denari_rimasti
+        settimane_rimanenti = settimane_totali - settimana_corrente
+        delta_morale = controlla_scorte(
+            lista_membri, quantita_provviste, settimane_rimanenti, razioni_correnti, delta_morale
+        )
+        variazione_evento = risultato_evento["variazione_morale_evento"]
+        morti_morale = aggiorna_morale(lista_membri, delta_morale, variazione_evento)
+        if morti_morale > 0:
+            print(f"  {morti_morale} membre/i morto/i per morale a zero.")
+        if conta_membri_vivi(lista_membri) <= 0:
+            print("Tutti i membri dell'equipaggio sono morti. GAME OVER.")
+            return False, lista_membri, quantita_provviste, quantita_merci, settimane_totali, albatri_avvistati, albatro_ucciso, denari_rimasti
+        mostra_riepilogo(lista_membri, quantita_provviste, quantita_merci)
+        ammutinamento = gestisci_ammutinamento(
+            lista_membri, razioni_correnti, albatri_avvistati, albatro_ucciso, settimane_totali
+        )
+        if ammutinamento:
+            return False, lista_membri, quantita_provviste, quantita_merci, settimane_totali, albatri_avvistati, albatro_ucciso, denari_rimasti
+        settimane_totali = ricalcola_settimane_per_morale(lista_membri, settimane_totali)
+        if settimana_corrente < settimane_totali:
+            risposta = input("Vuoi salvare la partita? (s/n): ").strip().lower()
+            while risposta != "s" and risposta != "n":
+                risposta = input("Rispondi s oppure n: ").strip().lower()
+            if risposta == "s":
+                salva_partita(
+                    lista_membri, quantita_provviste, quantita_merci,
+                    settimane_totali, settimana_corrente,
+                    contatore_eventi, albatri_avvistati, albatro_ucciso,
+                    razioni_correnti, delta_morale, denari_rimasti
+                )
+        settimana_corrente = settimana_corrente + 1
+    return True, lista_membri, quantita_provviste, quantita_merci, settimane_totali, albatri_avvistati, albatro_ucciso, denari_rimasti
