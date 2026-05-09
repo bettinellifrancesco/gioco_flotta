@@ -27,14 +27,14 @@
     ]
   },
   "provviste": {
-    "verdura": 0.0,
-    "frutta": 0.0,
+    "verdura": 10.0,
+    "frutta": 10.0,
     "carne": 3.0,
-    "acqua": 0.0
+    "acqua": 20.0
   },
   "merci": {
-    "medicinali": 0.0,
-    "armi": 0.0,
+    "medicinali": 5.0,
+    "armi": 5.0,
     "sale": 2.0,
     "stoffa": 0.8,
     "coltelli": 0.0,
